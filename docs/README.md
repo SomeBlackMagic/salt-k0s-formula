@@ -1,42 +1,78 @@
-# k0s Salt Formula — Development Specification
+# k0s Salt Formula
 
-k0s is a minimal Kubernetes distribution shipped as a single binary.
-This formula automates installation and configuration of k0s nodes.
+Usage documentation for the Salt formula that installs and manages k0s.
 
-## Supported roles
+The formula installs the k0s binary, generates controller configuration,
+creates a systemd unit through `k0s install controller` or `k0s install worker`,
+and manages the service.
 
-| Role | Description |
+## Supported Features
+
+| Feature | Status |
 |---|---|
-| `controller` | Control plane node |
-| `worker` | Worker node, joins an existing cluster |
-| `single` | Combined controller + worker, for dev/test |
+| Install the k0s binary to `/usr/local/bin/k0s` | supported |
+| `single` role | supported |
+| `controller` role | supported |
+| `worker` role | supported |
+| Generate `/etc/k0s/k0s.yaml` | supported for `single` and `controller` |
+| Generate a worker join token on the controller | supported through the standalone `k0s.token` state |
+| Manage the systemd service | supported |
+| Full k0s removal | not implemented yet; `k0s.uninstall` is a placeholder |
 
-## Supported platforms
+Supported binary download architectures: `amd64`, `arm64`, `aarch64`.
 
-| OS | Versions |
-|---|---|
-| Ubuntu | 22.04, 24.04 |
-| Debian | 11, 12 |
+## Documents
 
-Architectures: `amd64`, `arm64`.
+- [quickstart.md](quickstart.md) - minimal setup for single-node, controller, and worker nodes.
+- [pillar.md](pillar.md) - the full pillar contract and examples.
+- [states.md](states.md) - available state files and their behavior.
+- [operations.md](operations.md) - tokens, upgrades, service management, and limitations.
+- [testing.md](testing.md) - local unit and integration tests.
+- [stages/](stages/) - historical development-stage documentation.
 
-## Development stages
+## Minimal Single-Node Example
 
-| Stage | File | Description |
-|---|---|---|
-| 1 | [stage-01-structure.md](stages/stage-01-structure.md) | Repository layout and pillar schema |
-| 2 | [stage-02-install.md](stages/stage-02-install.md) | Binary installation (`install.sls`) |
-| 3 | [stage-03-config.md](stages/stage-03-config.md) | Configuration file generation (`config.sls`) |
-| 4 | [stage-04-controller.md](stages/stage-04-controller.md) | Controller role (`controller.sls`) |
-| 5 | [stage-05-worker.md](stages/stage-05-worker.md) | Worker role (`worker.sls`) |
-| 6 | [stage-06-service.md](stages/stage-06-service.md) | Service management (`service.sls`) |
-| 7 | [stage-07-token.md](stages/stage-07-token.md) | Join token management (`token.sls`) |
-| 8 | [stage-08-uninstall.md](stages/stage-08-uninstall.md) | Uninstall (`uninstall.sls`) |
-| 9 | [stage-09-testing.md](stages/stage-09-testing.md) | Kitchen suites and testinfra tests |
+```yaml
+k0s:
+  role: single
+  version: 'v1.30.2+k0s.0'
+  controller:
+    enable_worker: true
+    no_taints: true
+  config:
+    spec:
+      telemetry:
+        enabled: false
+```
 
-## General requirements
+Apply it:
 
-- Every state must be **idempotent**: a second `kitchen converge` must produce `Changed: 0`
-- No hardcoded values — everything is driven by pillars
-- Service restarts only when configuration or binary actually changed
-- All stages must pass `make tests` before being considered complete
+```bash
+salt '<minion-id>' saltutil.sync_states
+salt '<minion-id>' state.apply k0s
+```
+
+Check the node:
+
+```bash
+/usr/local/bin/k0s version
+systemctl status k0scontroller
+/usr/local/bin/k0s kubectl get nodes
+```
+
+## Salt Environment Requirements
+
+The formula uses custom state modules from `_states/`:
+
+- `k0s_controller.installed`
+- `k0s_worker.installed`
+
+Before applying the states in a regular Salt master/minion environment,
+synchronize the custom state modules:
+
+```bash
+salt '<minion-id>' saltutil.sync_states
+```
+
+The formula must be available in Salt file roots so that `salt://k0s/...`
+resolves to the `k0s/` directory, and `_states/` must be available for sync.
