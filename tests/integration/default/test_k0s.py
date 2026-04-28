@@ -60,6 +60,15 @@ def _k0s_controller_unit(host):
     return result.stdout
 
 
+def _k0s_worker_unit(host):
+    unit_file = host.file('/etc/systemd/system/k0sworker.service')
+    result = host.run('sudo cat /etc/systemd/system/k0sworker.service')
+
+    assert unit_file.exists
+    assert result.rc == 0, result.stderr
+    return result.stdout
+
+
 def test_salt_installed(host):
     assert host.package('salt-minion').is_installed
 
@@ -181,6 +190,81 @@ def test_k0s_controller_test_mode_does_not_apply_changes(host):
     )
     assert state_result['result'] is True
     assert state_result['changes'] == {}
+
+
+def test_k0s_worker_role_writes_token_and_installs_unit(host):
+    result = _apply_k0s_state_with_pillar(
+        host,
+        {
+            'k0s': {
+                'role': 'worker',
+                'worker': {
+                    'join_token': 'test-worker-token',
+                    'api_address': '10.0.0.10:6443',
+                    'profile': 'default',
+                },
+            },
+        },
+    )
+    token_file = host.file('/etc/k0s/join-token')
+    unit_content = _k0s_worker_unit(host)
+
+    assert token_file.exists
+    assert token_file.is_file
+    assert token_file.user == 'root'
+    assert token_file.group == 'root'
+    assert token_file.mode == 0o600
+    token_content = host.run('sudo cat /etc/k0s/join-token')
+
+    assert token_content.rc == 0, token_content.stderr
+    assert token_content.stdout.rstrip('\n') == 'test-worker-token'
+    assert 'k0s_worker_join_token' in {
+        state_result.get('__id__')
+        for state_result in result.get('local', {}).values()
+    }
+    assert 'ExecStart=' in unit_content
+    assert '--token-file' in unit_content
+    assert '/etc/k0s/join-token' in unit_content
+    assert '--api-server' in unit_content
+    assert 'https://10.0.0.10:6443' in unit_content
+    assert '--profile' in unit_content
+    assert 'default' in unit_content
+    assert '--data-dir' in unit_content
+    assert '/var/lib/k0s' in unit_content
+
+
+def test_k0s_worker_validation_fails_without_required_pillars(host):
+    _sync_states(host)
+    result = host.run(
+        f"{SALT_CALL} state.apply k0s pillar='{{\"k0s\": {{\"role\": \"worker\"}}}}' --out=json"
+    )
+    state_result = json.loads(result.stdout)
+    messages = [
+        '{0} {1}'.format(value.get('name', ''), value.get('comment', ''))
+        for value in state_result.get('local', {}).values()
+    ]
+
+    assert result.rc != 0
+    assert any('k0s.worker.join_token is required' in message for message in messages)
+    assert any('k0s.worker.api_address is required' in message for message in messages)
+
+
+def test_k0s_worker_install_is_idempotent(host):
+    result = _apply_k0s_state_with_pillar(
+        host,
+        {
+            'k0s': {
+                'role': 'worker',
+                'worker': {
+                    'join_token': 'test-worker-token',
+                    'api_address': '10.0.0.10:6443',
+                    'profile': 'default',
+                },
+            },
+        },
+    )
+
+    assert _changed_states(result) == {}
 
 
 def test_k0s_install_is_idempotent(host):
