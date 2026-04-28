@@ -1,0 +1,217 @@
+GEM
+  remote: https://rubygems.org/
+  specs:
+    base64 (0.3.0)
+    bcrypt_pbkdf (1.1.2)
+    bcrypt_pbkdf (1.1.2-arm64-darwin)
+    bcrypt_pbkdf (1.1.2-x86_64-darwin)
+    benchmark (0.5.0)
+    bigdecimal (4.1.2)
+    builder (3.3.0)
+    chef-gyoku (1.5.0)
+      builder (>= 2.1.2)
+      rexml (~> 3.4)
+    chef-utils (19.2.12)
+      concurrent-ruby
+    chef-winrm (2.5.0)
+      builder (>= 2.1.2)
+      chef-gyoku (~> 1.5)
+      erubi (~> 1.8)
+      gssapi (~> 1.2)
+      httpclient (~> 2.2, >= 2.2.0.2)
+      logging (>= 1.6.1, < 3.0)
+      nori (~> 2.7)
+      rexml (>= 3.4.2, < 4.0)
+      rubyntlm (~> 0.6.0, >= 0.6.3)
+    chef-winrm-elevated (1.2.5)
+      chef-winrm (>= 2.3.11)
+      chef-winrm-fs (>= 1.3.7)
+      erubi (~> 1.8)
+    chef-winrm-fs (1.4.2)
+      benchmark (~> 0.5.0)
+      chef-winrm (~> 2.4)
+      csv (~> 3.3)
+      erubi (>= 1.7)
+      logging (>= 1.6.1, < 3.0)
+      rubyzip (~> 2.0)
+    concurrent-ruby (1.3.6)
+    csv (3.3.5)
+    date (3.5.1)
+    ed25519 (1.4.0)
+    erb (6.0.4)
+    erubi (1.13.1)
+    ffi (1.17.4)
+    ffi (1.17.4-aarch64-linux-gnu)
+    ffi (1.17.4-aarch64-linux-musl)
+    ffi (1.17.4-arm-linux-gnu)
+    ffi (1.17.4-arm-linux-musl)
+    ffi (1.17.4-arm64-darwin)
+    ffi (1.17.4-x86-linux-gnu)
+    ffi (1.17.4-x86-linux-musl)
+    ffi (1.17.4-x86_64-darwin)
+    ffi (1.17.4-x86_64-linux-gnu)
+    ffi (1.17.4-x86_64-linux-musl)
+    gssapi (1.3.1)
+      ffi (>= 1.0.1)
+    hashie (5.1.0)
+      logger
+    httpclient (2.9.0)
+      mutex_m
+    io-console (0.8.2)
+    irb (1.18.0)
+      pp (>= 0.6.0)
+      prism (>= 1.3.0)
+      rdoc (>= 4.0.0)
+      reline (>= 0.4.2)
+    kitchen-docker (3.0.0)
+      test-kitchen (>= 1.0.0)
+    kitchen-salt (0.7.2)
+      hashie (>= 3.5)
+      test-kitchen (>= 1.4)
+    little-plugger (1.1.4)
+    logger (1.7.0)
+    logging (2.4.0)
+      little-plugger (~> 1.1)
+      multi_json (~> 1.14)
+    mixlib-install (3.16.0)
+      mixlib-shellout
+      mixlib-versioning
+      thor
+    mixlib-shellout (3.4.10)
+      chef-utils
+    mixlib-versioning (1.2.12)
+    multi_json (1.20.1)
+    mutex_m (0.3.0)
+    net-scp (4.1.0)
+      net-ssh (>= 2.6.5, < 8.0.0)
+    net-ssh (7.3.2)
+    net-ssh-gateway (2.0.0)
+      net-ssh (>= 4.0.0)
+    nori (2.7.1)
+      bigdecimal
+    ostruct (0.6.3)
+    pp (0.6.3)
+      prettyprint
+    prettyprint (0.2.0)
+    prism (1.9.0)
+    psych (5.3.1)
+      date
+      stringio
+    rdoc (7.2.0)
+      erb
+      psych (>= 4.0.0)
+      tsort
+    reline (0.6.3)
+      io-console (~> 0.5)
+    rexml (3.4.4)
+    rubyntlm (0.6.5)
+      base64
+    rubyzip (2.4.1)
+    stringio (3.2.0)
+    syslog (0.4.0)
+      logger
+    test-kitchen (4.0.0)
+      bcrypt_pbkdf (~> 1.0)
+      chef-utils (>= 16.4.35)
+      chef-winrm (>= 2.5.0, < 3.0)
+      chef-winrm-elevated (>= 1.0, < 2.0)
+      chef-winrm-fs (>= 1.0, < 2.0)
+      csv (~> 3.3)
+      ed25519 (~> 1.3)
+      irb (~> 1.15)
+      mixlib-install (~> 3.6)
+      mixlib-shellout (>= 1.2, < 4.0)
+      net-scp (>= 1.1, < 5.0)
+      net-ssh (>= 2.9, < 8.0)
+      net-ssh-gateway (>= 1.2, < 3.0)
+      ostruct (~> 0.6)
+      syslog (~> 0.3)
+      thor (>= 0.19, < 2.0)
+    thor (1.5.0)
+    tsort (0.2.0)
+
+PLATFORMS
+  aarch64-linux-gnu
+  aarch64-linux-musl
+  arm-linux-gnu
+  arm-linux-musl
+  arm64-darwin
+  ruby
+  x86-linux-gnu
+  x86-linux-musl
+  x86_64-darwin
+  x86_64-linux-gnu
+  x86_64-linux-musl
+
+DEPENDENCIES
+  kitchen-docker
+  kitchen-salt
+  test-kitchen
+
+CHECKSUMS
+  base64 (0.3.0) sha256=27337aeabad6ffae05c265c450490628ef3ebd4b67be58257393227588f5a97b
+  bcrypt_pbkdf (1.1.2) sha256=c2414c23ce66869b3eb9f643d6a3374d8322dfb5078125c82792304c10b94cf6
+  bcrypt_pbkdf (1.1.2-arm64-darwin) sha256=afdd6feb6ed5a97b8e44caacb3f2d641b98af78e6a516d4a3520b69af5cf9fea
+  bcrypt_pbkdf (1.1.2-x86_64-darwin) sha256=35f5639d0058e6c2cc2f856f9c0b14080543268d3047abe6bc81c513093caa0e
+  benchmark (0.5.0) sha256=465df122341aedcb81a2a24b4d3bd19b6c67c1530713fd533f3ff034e419236c
+  bigdecimal (4.1.2) sha256=53d217666027eab4280346fba98e7d5b66baaae1b9c3c1c0ffe89d48188a3fbd
+  builder (3.3.0) sha256=497918d2f9dca528fdca4b88d84e4ef4387256d984b8154e9d5d3fe5a9c8835f
+  chef-gyoku (1.5.0) sha256=7354a3cff8243cc9bbf9ac136e63ecfbf4a7b6f07622f5a092a0f7626fcff836
+  chef-utils (19.2.12) sha256=0b02a72f05ac5816a81f1443a845611cae47d4971f2e6defddd577fb90a5539e
+  chef-winrm (2.5.0) sha256=d0214fc72e39d7830e8bdc28d0efb12e1ef55bd1cd547ae4bf2e509d298b85f3
+  chef-winrm-elevated (1.2.5) sha256=9985b4eb1e5bbfbe1db9e4bbea29a5775ee9e6e7d52cfbb9787bcab605ff5807
+  chef-winrm-fs (1.4.2) sha256=e8d696faf8eb070cfcd688a580469f9cf3cbd1a4d11a3a001469fcc780b8683a
+  concurrent-ruby (1.3.6) sha256=6b56837e1e7e5292f9864f34b69c5a2cbc75c0cf5338f1ce9903d10fa762d5ab
+  csv (3.3.5) sha256=6e5134ac3383ef728b7f02725d9872934f523cb40b961479f69cf3afa6c8e73f
+  date (3.5.1) sha256=750d06384d7b9c15d562c76291407d89e368dda4d4fff957eb94962d325a0dc0
+  ed25519 (1.4.0) sha256=16e97f5198689a154247169f3453ef4cfd3f7a47481fde0ae33206cdfdcac506
+  erb (6.0.4) sha256=38e3803694be357fe2bfe312487c74beaf9fb4e5beb3e22498952fe1645b95d9
+  erubi (1.13.1) sha256=a082103b0885dbc5ecf1172fede897f9ebdb745a4b97a5e8dc63953db1ee4ad9
+  ffi (1.17.4) sha256=bcd1642e06f0d16fc9e09ac6d49c3a7298b9789bcb58127302f934e437d60acf
+  ffi (1.17.4-aarch64-linux-gnu) sha256=b208f06f91ffd8f5e1193da3cae3d2ccfc27fc36fba577baf698d26d91c080df
+  ffi (1.17.4-aarch64-linux-musl) sha256=9286b7a615f2676245283aef0a0a3b475ae3aae2bb5448baace630bb77b91f39
+  ffi (1.17.4-arm-linux-gnu) sha256=d6dbddf7cb77bf955411af5f187a65b8cd378cb003c15c05697f5feee1cb1564
+  ffi (1.17.4-arm-linux-musl) sha256=9d4838ded0465bef6e2426935f6bcc93134b6616785a84ffd2a3d82bc3cf6f95
+  ffi (1.17.4-arm64-darwin) sha256=19071aaf1419251b0a46852abf960e77330a3b334d13a4ab51d58b31a937001b
+  ffi (1.17.4-x86-linux-gnu) sha256=38e150df5f4ca555e25beca4090823ae09657bceded154e3c52f8631c1ed72cf
+  ffi (1.17.4-x86-linux-musl) sha256=fbeec0fc7c795bcf86f623bb18d31ea1820f7bd580e1703a3d3740d527437809
+  ffi (1.17.4-x86_64-darwin) sha256=aa70390523cf3235096cf64962b709b4cfbd5c082a2cb2ae714eb0fe2ccda496
+  ffi (1.17.4-x86_64-linux-gnu) sha256=9d3db14c2eae074b382fa9c083fe95aec6e0a1451da249eab096c34002bc752d
+  ffi (1.17.4-x86_64-linux-musl) sha256=3fdf9888483de005f8ef8d1cf2d3b20d86626af206cbf780f6a6a12439a9c49e
+  gssapi (1.3.1) sha256=c51cf30842ee39bd93ce7fc33e20405ff8a04cda9dec6092071b61258284aee1
+  hashie (5.1.0) sha256=c266471896f323c446ea8207f8ffac985d2718df0a0ba98651a3057096ca3870
+  httpclient (2.9.0) sha256=4b645958e494b2f86c2f8a2f304c959baa273a310e77a2931ddb986d83e498c8
+  io-console (0.8.2) sha256=d6e3ae7a7cc7574f4b8893b4fca2162e57a825b223a177b7afa236c5ef9814cc
+  irb (1.18.0) sha256=de9454a0703a54704b9811a5ef31a60c86949fbf4013fcf244fabc7c775248e3
+  kitchen-docker (3.0.0) sha256=80ddafa8d60bdd0647574f81068eb081bbc238513f84b1c09e3e0f364bac7cf1
+  kitchen-salt (0.7.2) sha256=51d18784146386f4c215ae8879922ec7254cf7215ced176bfc36b1c7d7b58d7c
+  little-plugger (1.1.4) sha256=d5f347c00d9d648040ef7c17d6eb09d3d0719adf19ca30d1a3b6fb26d0a631bb
+  logger (1.7.0) sha256=196edec7cc44b66cfb40f9755ce11b392f21f7967696af15d274dde7edff0203
+  logging (2.4.0) sha256=ba8893a3c211b836f4131bb93b3eb3137a0c3b1fcd0ec3d570e324d8bdc00ccb
+  mixlib-install (3.16.0) sha256=821e0a84df4a200c7b9fc926e54305d0ac905f537eb9fdc53893fc1cbe36f873
+  mixlib-shellout (3.4.10) sha256=7c8a6c5a6c90922a8871ed682129c19c9b1a514eedea2e867077229e6a415f0c
+  mixlib-versioning (1.2.12) sha256=798775c5e02ec2e3932cac3447ba51aabc096fbd310cc5a1ac9d77c11fcb1e33
+  multi_json (1.20.1) sha256=2f3934e805cc45ef91b551a1f89d0e9191abd06a5e04a2ef09a6a036c452ca6d
+  mutex_m (0.3.0) sha256=cfcb04ac16b69c4813777022fdceda24e9f798e48092a2b817eb4c0a782b0751
+  net-scp (4.1.0) sha256=a99b0b92a1e5d360b0de4ffbf2dc0c91531502d3d4f56c28b0139a7c093d1a5d
+  net-ssh (7.3.2) sha256=65029e213c380e20e5fd92ece663934ab0a0fe888e0cd7cc6a5b664074362dd4
+  net-ssh-gateway (2.0.0) sha256=1d9cb51de52e2d64982f4c136c30435e914c05a980814a91055c89e183397bd0
+  nori (2.7.1) sha256=6166cd336959854762073e2fbae888593809cac1b3e904f4fb009313d7226861
+  ostruct (0.6.3) sha256=95a2ed4a4bd1d190784e666b47b2d3f078e4a9efda2fccf18f84ddc6538ed912
+  pp (0.6.3) sha256=2951d514450b93ccfeb1df7d021cae0da16e0a7f95ee1e2273719669d0ab9df6
+  prettyprint (0.2.0) sha256=2bc9e15581a94742064a3cc8b0fb9d45aae3d03a1baa6ef80922627a0766f193
+  prism (1.9.0) sha256=7b530c6a9f92c24300014919c9dcbc055bf4cdf51ec30aed099b06cd6674ef85
+  psych (5.3.1) sha256=eb7a57cef10c9d70173ff74e739d843ac3b2c019a003de48447b2963d81b1974
+  rdoc (7.2.0) sha256=8650f76cd4009c3b54955eb5d7e3a075c60a57276766ebf36f9085e8c9f23192
+  reline (0.6.3) sha256=1198b04973565b36ec0f11542ab3f5cfeeec34823f4e54cebde90968092b1835
+  rexml (3.4.4) sha256=19e0a2c3425dfbf2d4fc1189747bdb2f849b6c5e74180401b15734bc97b5d142
+  rubyntlm (0.6.5) sha256=47013402b99ae29ee93f930af51edaec8c6008556f4be25705a422b4430314f5
+  rubyzip (2.4.1) sha256=8577c88edc1fde8935eb91064c5cb1aef9ad5494b940cf19c775ee833e075615
+  stringio (3.2.0) sha256=c37cb2e58b4ffbd33fe5cd948c05934af997b36e0b6ca6fdf43afa234cf222e1
+  syslog (0.4.0) sha256=c4c38ae982fe72903ec41094b5e5f2dcbbc66f510d0225c9702e5e980d827472
+  test-kitchen (4.0.0) sha256=24017be5f7a8867d1b77eee3fc64409be6f1fb0815c1a4e12a32ef885d3afe48
+  thor (1.5.0) sha256=e3a9e55fe857e44859ce104a84675ab6e8cd59c650a49106a05f55f136425e73
+  tsort (0.2.0) sha256=9650a793f6859a43b6641671278f79cfead60ac714148aabe4e3f0060480089f
+
+BUNDLED WITH
+  4.0.10
