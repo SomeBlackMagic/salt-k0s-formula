@@ -21,8 +21,6 @@ k0s_config_create:
     - require:
       - file: k0s_config_directory
       - file: k0s_binary_install
-    - watch_in:
-      - test: k0s_service
 
 k0s_config_file:
   file.managed:
@@ -34,8 +32,6 @@ k0s_config_file:
     - mode: '0600'
     - require:
       - cmd: k0s_config_create
-    - watch_in:
-      - test: k0s_service
 {%- else %}
 k0s_config_file:
   file.managed:
@@ -47,6 +43,4 @@ k0s_config_file:
     - mode: '0600'
     - require:
       - file: k0s_config_directory
-    - watch_in:
-      - test: k0s_service
 {%- endif %}

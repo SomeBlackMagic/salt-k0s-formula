@@ -69,6 +69,10 @@ def _k0s_worker_unit(host):
     return result.stdout
 
 
+def _systemctl(host, command, service):
+    return host.run(f'sudo systemctl {command} {service}')
+
+
 def test_salt_installed(host):
     assert host.package('salt-minion').is_installed
 
@@ -160,6 +164,18 @@ def test_k0s_controller_unit_is_installed(host):
     assert '/var/lib/k0s' in unit_content
 
 
+def test_k0s_controller_service_is_enabled_and_running(host):
+    _apply_k0s_state(host)
+
+    active = _systemctl(host, 'is-active', 'k0scontroller')
+    enabled = _systemctl(host, 'is-enabled', 'k0scontroller')
+
+    assert active.rc == 0, active.stdout + active.stderr
+    assert active.stdout.strip() == 'active'
+    assert enabled.rc == 0, enabled.stdout + enabled.stderr
+    assert enabled.stdout.strip() == 'enabled'
+
+
 def test_k0s_controller_flags_are_installed_from_pillar(host):
     _apply_k0s_state_with_pillar(
         host,
@@ -192,12 +208,40 @@ def test_k0s_controller_test_mode_does_not_apply_changes(host):
     assert state_result['changes'] == {}
 
 
+def test_k0s_controller_service_can_be_stopped_and_disabled(host):
+    _apply_k0s_state_with_pillar(
+        host,
+        {
+            'k0s': {
+                'service': {
+                    'enabled': False,
+                    'running': False,
+                },
+            },
+        },
+    )
+
+    active = _systemctl(host, 'is-active', 'k0scontroller')
+    enabled = _systemctl(host, 'is-enabled', 'k0scontroller')
+
+    assert active.rc != 0
+    assert active.stdout.strip() == 'inactive'
+    assert enabled.rc != 0
+    assert enabled.stdout.strip() == 'disabled'
+
+    _apply_k0s_state(host)
+
+
 def test_k0s_worker_role_writes_token_and_installs_unit(host):
     result = _apply_k0s_state_with_pillar(
         host,
         {
             'k0s': {
                 'role': 'worker',
+                'service': {
+                    'enabled': False,
+                    'running': False,
+                },
                 'worker': {
                     'join_token': 'test-worker-token',
                     'api_address': '10.0.0.10:6443',
@@ -250,11 +294,32 @@ def test_k0s_worker_validation_fails_without_required_pillars(host):
 
 
 def test_k0s_worker_install_is_idempotent(host):
+    _apply_k0s_state_with_pillar(
+        host,
+        {
+            'k0s': {
+                'role': 'worker',
+                'service': {
+                    'enabled': False,
+                    'running': False,
+                },
+                'worker': {
+                    'join_token': 'test-worker-token',
+                    'api_address': '10.0.0.10:6443',
+                    'profile': 'default',
+                },
+            },
+        },
+    )
     result = _apply_k0s_state_with_pillar(
         host,
         {
             'k0s': {
                 'role': 'worker',
+                'service': {
+                    'enabled': False,
+                    'running': False,
+                },
                 'worker': {
                     'join_token': 'test-worker-token',
                     'api_address': '10.0.0.10:6443',
