@@ -12,10 +12,26 @@ K0S_VERSION = 'v1.30.2+k0s.0'
 
 
 def _apply_k0s_state(host):
+    _sync_states(host)
     result = host.run(f'{SALT_CALL} state.apply k0s --out=json')
 
     assert result.rc == 0, result.stderr
     return json.loads(result.stdout)
+
+
+def _apply_k0s_state_with_pillar(host, pillar):
+    _sync_states(host)
+    pillar_json = json.dumps(pillar)
+    result = host.run(f"{SALT_CALL} state.apply k0s pillar='{pillar_json}' --out=json")
+
+    assert result.rc == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+def _sync_states(host):
+    result = host.run(f'{SALT_CALL} saltutil.sync_states')
+
+    assert result.rc == 0, result.stderr
 
 
 def _changed_states(result):
@@ -35,6 +51,15 @@ def _k0s_config(host):
     return yaml.safe_load(result.stdout)
 
 
+def _k0s_controller_unit(host):
+    unit_file = host.file('/etc/systemd/system/k0scontroller.service')
+    result = host.run('sudo cat /etc/systemd/system/k0scontroller.service')
+
+    assert unit_file.exists
+    assert result.rc == 0, result.stderr
+    return result.stdout
+
+
 def test_salt_installed(host):
     assert host.package('salt-minion').is_installed
 
@@ -51,7 +76,7 @@ def test_k0s_states_succeed(host):
     assert 'k0s_binary_permissions' in state_ids
     assert 'k0s_config_directory' in state_ids
     assert 'k0s_config_file' in state_ids
-    assert 'k0s_controller_placeholder' in state_ids
+    assert 'k0s_controller_unit' in state_ids
     assert 'k0s_service' in state_ids
 
 
@@ -109,6 +134,53 @@ def test_k0s_config_is_valid(host):
     result = host.run('sudo /usr/local/bin/k0s config validate --config /etc/k0s/k0s.yaml')
 
     assert result.rc == 0, result.stderr
+
+
+def test_k0s_controller_unit_is_installed(host):
+    unit_file = host.file('/etc/systemd/system/k0scontroller.service')
+    unit_content = _k0s_controller_unit(host)
+
+    assert unit_file.exists
+    assert unit_file.is_file
+    assert unit_file.user == 'root'
+    assert unit_file.group == 'root'
+    assert 'ExecStart=' in unit_content
+    assert '--config' in unit_content
+    assert '/etc/k0s/k0s.yaml' in unit_content
+    assert '--data-dir' in unit_content
+    assert '/var/lib/k0s' in unit_content
+
+
+def test_k0s_controller_flags_are_installed_from_pillar(host):
+    _apply_k0s_state_with_pillar(
+        host,
+        {
+            'k0s': {
+                'controller': {
+                    'enable_worker': True,
+                    'no_taints': True,
+                },
+            },
+        },
+    )
+    unit_content = _k0s_controller_unit(host)
+
+    assert '--enable-worker' in unit_content
+    assert '--no-taints' in unit_content
+
+
+def test_k0s_controller_test_mode_does_not_apply_changes(host):
+    _sync_states(host)
+    result = host.run(f'{SALT_CALL} state.apply k0s test=True --out=json')
+
+    assert result.rc == 0, result.stderr
+    state_result = next(
+        value
+        for value in json.loads(result.stdout).get('local', {}).values()
+        if value.get('__id__') == 'k0s_controller_unit'
+    )
+    assert state_result['result'] is True
+    assert state_result['changes'] == {}
 
 
 def test_k0s_install_is_idempotent(host):

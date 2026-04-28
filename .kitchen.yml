@@ -12,6 +12,10 @@ platforms:
   - name: ubuntu
     driver_config:
       image: salt-kitchen:ubuntu-22.04
+      run_command: /sbin/init
+      run_options: --cgroupns=host
+      volume:
+        - /sys/fs/cgroup:/sys/fs/cgroup:rw
 
 verifier:
   name: shell

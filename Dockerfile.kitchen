@@ -3,6 +3,9 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y \
+    dbus \
+    systemd \
+    systemd-sysv \
     sudo \
     openssh-server \
     curl \
@@ -18,3 +21,5 @@ ADD https://github.com/saltstack/salt-bootstrap/releases/latest/download/bootstr
 # -X = do not start services after install (no systemd in Docker)
 RUN chmod +x /tmp/bootstrap-salt.sh && sh /tmp/bootstrap-salt.sh -X stable; \
     salt-call --version && rm /tmp/bootstrap-salt.sh
+
+STOPSIGNAL SIGRTMIN+3
