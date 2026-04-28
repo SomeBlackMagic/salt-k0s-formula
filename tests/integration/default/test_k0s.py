@@ -1,5 +1,7 @@
 import json
 
+import yaml
+
 
 SALT_CALL = (
     'sudo salt-call --local '
@@ -24,6 +26,15 @@ def _changed_states(result):
     }
 
 
+def _k0s_config(host):
+    config_file = host.file('/etc/k0s/k0s.yaml')
+    result = host.run('sudo cat /etc/k0s/k0s.yaml')
+
+    assert config_file.exists
+    assert result.rc == 0, result.stderr
+    return yaml.safe_load(result.stdout)
+
+
 def test_salt_installed(host):
     assert host.package('salt-minion').is_installed
 
@@ -38,9 +49,10 @@ def test_k0s_states_succeed(host):
     assert 'k0s_binary_download' in state_ids
     assert 'k0s_binary_install' in state_ids
     assert 'k0s_binary_permissions' in state_ids
-    assert 'k0s_config_placeholder' in state_ids
+    assert 'k0s_config_directory' in state_ids
+    assert 'k0s_config_file' in state_ids
     assert 'k0s_controller_placeholder' in state_ids
-    assert 'k0s_service_placeholder' in state_ids
+    assert 'k0s_service' in state_ids
 
 
 def test_k0s_binary_is_installed(host):
@@ -58,6 +70,45 @@ def test_k0s_version_matches_pillar(host):
 
     assert result.rc == 0
     assert K0S_VERSION in result.stdout
+
+
+def test_k0s_config_file_is_managed(host):
+    config_file = host.file('/etc/k0s/k0s.yaml')
+
+    assert config_file.exists
+    assert config_file.is_file
+    assert config_file.user == 'root'
+    assert config_file.group == 'root'
+    assert config_file.mode == 0o600
+
+
+def test_k0s_config_values_match_pillar(host):
+    config = _k0s_config(host)
+
+    assert config['apiVersion'] == 'k0s.k0sproject.io/v1beta1'
+    assert config['kind'] == 'ClusterConfig'
+    assert config['metadata']['name'] == 'k0s'
+    assert config['spec']['network']['provider'] == 'kuberouter'
+    assert config['spec']['network']['podCIDR'] == '10.244.0.0/16'
+    assert config['spec']['network']['serviceCIDR'] == '10.96.0.0/12'
+    assert config['spec']['storage']['type'] == 'etcd'
+    assert config['spec']['telemetry']['enabled'] is False
+
+
+def test_k0s_config_api_address_is_resolved(host):
+    config = _k0s_config(host)
+    api_address = config['spec']['api']['address']
+
+    assert api_address
+    assert not api_address.startswith('127.')
+    assert config['spec']['api']['sans'][0] == api_address
+    assert 'k0s.local' in config['spec']['api']['sans']
+
+
+def test_k0s_config_is_valid(host):
+    result = host.run('sudo /usr/local/bin/k0s config validate --config /etc/k0s/k0s.yaml')
+
+    assert result.rc == 0, result.stderr
 
 
 def test_k0s_install_is_idempotent(host):

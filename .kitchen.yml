@@ -23,6 +23,7 @@ suites:
     provisioner:
       pillars: {}
       pillars_from_files:
+        top.sls: pillars/top.sls
         base.sls: pillars/base.sls
       state_top:
         base:
