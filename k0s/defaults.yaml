@@ -24,6 +24,9 @@ k0s:
     join_token: ''
     api_address: ''
     profile: default
+  token:
+    ttl: 24
+    path: /etc/k0s/worker-join-token
   service:
     enabled: true
     running: true

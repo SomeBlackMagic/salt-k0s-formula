@@ -1,5 +1,6 @@
 import json
 
+import pytest
 import yaml
 
 
@@ -12,7 +13,6 @@ K0S_VERSION = 'v1.30.2+k0s.0'
 
 
 def _apply_k0s_state(host):
-    _sync_states(host)
     result = host.run(f'{SALT_CALL} state.apply k0s --out=json')
 
     assert result.rc == 0, result.stderr
@@ -20,7 +20,6 @@ def _apply_k0s_state(host):
 
 
 def _apply_k0s_state_with_pillar(host, pillar):
-    _sync_states(host)
     pillar_json = json.dumps(pillar)
     result = host.run(f"{SALT_CALL} state.apply k0s pillar='{pillar_json}' --out=json")
 
@@ -28,7 +27,19 @@ def _apply_k0s_state_with_pillar(host, pillar):
     return json.loads(result.stdout)
 
 
-def _sync_states(host):
+def _apply_k0s_token_state(host, pillar=None):
+    pillar_arg = ''
+    if pillar is not None:
+        pillar_arg = " pillar='{0}'".format(json.dumps(pillar))
+
+    result = host.run(f'{SALT_CALL} state.apply k0s.token{pillar_arg} --out=json')
+
+    assert result.rc == 0, result.stderr
+    return json.loads(result.stdout)
+
+
+@pytest.fixture(scope='session', autouse=True)
+def synced_states(host):
     result = host.run(f'{SALT_CALL} saltutil.sync_states')
 
     assert result.rc == 0, result.stderr
@@ -38,6 +49,14 @@ def _changed_states(result):
     return {
         state_id: state_result.get('changes')
         for state_id, state_result in result.get('local', {}).items()
+        if state_result.get('changes')
+    }
+
+
+def _changed_state_ids(result):
+    return {
+        state_result.get('__id__')
+        for state_result in result.get('local', {}).values()
         if state_result.get('changes')
     }
 
@@ -195,7 +214,6 @@ def test_k0s_controller_flags_are_installed_from_pillar(host):
 
 
 def test_k0s_controller_test_mode_does_not_apply_changes(host):
-    _sync_states(host)
     result = host.run(f'{SALT_CALL} state.apply k0s test=True --out=json')
 
     assert result.rc == 0, result.stderr
@@ -278,7 +296,6 @@ def test_k0s_worker_role_writes_token_and_installs_unit(host):
 
 
 def test_k0s_worker_validation_fails_without_required_pillars(host):
-    _sync_states(host)
     result = host.run(
         f"{SALT_CALL} state.apply k0s pillar='{{\"k0s\": {{\"role\": \"worker\"}}}}' --out=json"
     )
@@ -330,6 +347,45 @@ def test_k0s_worker_install_is_idempotent(host):
     )
 
     assert _changed_states(result) == {}
+
+
+def test_k0s_token_state_creates_worker_join_token(host):
+    _apply_k0s_token_state(host)
+    token_file = host.file('/etc/k0s/worker-join-token')
+    token_content = host.run('sudo cat /etc/k0s/worker-join-token')
+
+    assert token_file.exists
+    assert token_file.is_file
+    assert token_file.user == 'root'
+    assert token_file.group == 'root'
+    assert token_file.mode == 0o600
+    assert token_content.rc == 0, token_content.stderr
+    assert token_content.stdout.strip()
+
+
+def test_k0s_token_state_is_idempotent_within_ttl(host):
+    _apply_k0s_token_state(host)
+    result = _apply_k0s_token_state(host)
+
+    assert _changed_states(result) == {}
+
+
+def test_k0s_token_state_regenerates_expired_token(host):
+    _apply_k0s_token_state(host, {'k0s': {'token': {'ttl': 1}}})
+    before = host.run('sudo stat -c %Y /etc/k0s/worker-join-token')
+
+    assert before.rc == 0, before.stderr
+
+    touch = host.run('sudo touch -d "2 hours ago" /etc/k0s/worker-join-token')
+
+    assert touch.rc == 0, touch.stderr
+
+    result = _apply_k0s_token_state(host, {'k0s': {'token': {'ttl': 1}}})
+    after = host.run('sudo stat -c %Y /etc/k0s/worker-join-token')
+
+    assert after.rc == 0, after.stderr
+    assert int(after.stdout.strip()) > int(before.stdout.strip())
+    assert 'k0s_worker_join_token_create' in _changed_state_ids(result)
 
 
 def test_k0s_install_is_idempotent(host):
