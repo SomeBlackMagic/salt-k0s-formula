@@ -1,11 +1,13 @@
 name: k0s
-version: 0.7.0
-description: Incus virtualization formula
+version: 0.1.0
+description:
 maintainers:
   - name: Developer
     email: dev@example.com
 
 dependencies: []
+
+formula_path: k0s
 
 salt:
   min_version: '3006'

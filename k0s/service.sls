@@ -41,19 +41,10 @@ k0s_service:
 
 {%- if role in ['controller', 'single'] %}
 k0s_controller_operational:
-  cmd.run:
-    - name: |
-        timeout=120
-        interval=5
-        elapsed=0
-        until /usr/local/bin/k0s kubectl get nodes >/dev/null 2>&1; do
-          if [ "$elapsed" -ge "$timeout" ]; then
-            exit 1
-          fi
-          sleep "$interval"
-          elapsed=$((elapsed + interval))
-        done
-    - unless: /usr/local/bin/k0s kubectl get nodes >/dev/null 2>&1
+  k0s_cluster.operational:
+    - name: k0s
+    - timeout: 120
+    - interval: 5
     - require:
       - service: k0s_service
 {%- endif %}

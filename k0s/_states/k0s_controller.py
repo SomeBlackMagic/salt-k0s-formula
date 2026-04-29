@@ -18,6 +18,7 @@ def installed(
     data_dir,
     binary=DEFAULT_BINARY,
     unit_path=DEFAULT_UNIT_PATH,
+    single=False,
     enable_worker=False,
     no_taints=False,
     extra_args=None,
@@ -43,6 +44,7 @@ def installed(
         binary=binary,
         config=config,
         data_dir=data_dir,
+        single=single,
         enable_worker=enable_worker,
         no_taints=no_taints,
         extra_args=extra_argv,
@@ -51,6 +53,7 @@ def installed(
     desired_args = _desired_unit_args(
         config=config,
         data_dir=data_dir,
+        single=single,
         enable_worker=enable_worker,
         no_taints=no_taints,
         extra_args=extra_argv,
@@ -77,6 +80,7 @@ def installed(
             binary=binary,
             config=config,
             data_dir=data_dir,
+            single=single,
             enable_worker=enable_worker,
             no_taints=no_taints,
             extra_args=extra_argv,
@@ -133,7 +137,7 @@ def _normalize_extra_args(extra_args):
         }
 
 
-def _install_command(binary, config, data_dir, enable_worker, no_taints, extra_args, force):
+def _install_command(binary, config, data_dir, single, enable_worker, no_taints, extra_args, force):
     command = [binary, 'install']
 
     if force:
@@ -147,6 +151,9 @@ def _install_command(binary, config, data_dir, enable_worker, no_taints, extra_a
         data_dir,
     ])
 
+    if single:
+        command.append('--single')
+
     if enable_worker:
         command.append('--enable-worker')
 
@@ -157,11 +164,14 @@ def _install_command(binary, config, data_dir, enable_worker, no_taints, extra_a
     return command
 
 
-def _desired_unit_args(config, data_dir, enable_worker, no_taints, extra_args):
+def _desired_unit_args(config, data_dir, single, enable_worker, no_taints, extra_args):
     args = [
         ('option', '--config', config),
         ('option', '--data-dir', data_dir),
     ]
+
+    if single:
+        args.append(('flag', '--single', None))
 
     if enable_worker:
         args.append(('flag', '--enable-worker', None))

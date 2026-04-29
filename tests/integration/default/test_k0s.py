@@ -38,6 +38,17 @@ def _apply_k0s_token_state(host, pillar=None):
     return json.loads(result.stdout)
 
 
+def _apply_k0s_token_state_failure(host, pillar=None):
+    pillar_arg = ''
+    if pillar is not None:
+        pillar_arg = " pillar='{0}'".format(json.dumps(pillar))
+
+    result = host.run(f'{SALT_CALL} state.apply k0s.token{pillar_arg} --out=json')
+
+    assert result.rc != 0
+    return json.loads(result.stdout)
+
+
 @pytest.fixture(scope='session', autouse=True)
 def synced_states(host):
     result = host.run(f'{SALT_CALL} saltutil.sync_states')
@@ -349,43 +360,17 @@ def test_k0s_worker_install_is_idempotent(host):
     assert _changed_states(result) == {}
 
 
-def test_k0s_token_state_creates_worker_join_token(host):
-    _apply_k0s_token_state(host)
-    token_file = host.file('/etc/k0s/worker-join-token')
-    token_content = host.run('sudo cat /etc/k0s/worker-join-token')
+def test_k0s_token_state_fails_clearly_for_single_role(host):
+    result = _apply_k0s_token_state_failure(host)
+    messages = [
+        '{0} {1}'.format(
+            state_result.get('name', ''),
+            state_result.get('comment', ''),
+        )
+        for state_result in result.get('local', {}).values()
+    ]
 
-    assert token_file.exists
-    assert token_file.is_file
-    assert token_file.user == 'root'
-    assert token_file.group == 'root'
-    assert token_file.mode == 0o600
-    assert token_content.rc == 0, token_content.stderr
-    assert token_content.stdout.strip()
-
-
-def test_k0s_token_state_is_idempotent_within_ttl(host):
-    _apply_k0s_token_state(host)
-    result = _apply_k0s_token_state(host)
-
-    assert _changed_states(result) == {}
-
-
-def test_k0s_token_state_regenerates_expired_token(host):
-    _apply_k0s_token_state(host, {'k0s': {'token': {'ttl': 1}}})
-    before = host.run('sudo stat -c %Y /etc/k0s/worker-join-token')
-
-    assert before.rc == 0, before.stderr
-
-    touch = host.run('sudo touch -d "2 hours ago" /etc/k0s/worker-join-token')
-
-    assert touch.rc == 0, touch.stderr
-
-    result = _apply_k0s_token_state(host, {'k0s': {'token': {'ttl': 1}}})
-    after = host.run('sudo stat -c %Y /etc/k0s/worker-join-token')
-
-    assert after.rc == 0, after.stderr
-    assert int(after.stdout.strip()) > int(before.stdout.strip())
-    assert 'k0s_worker_join_token_create' in _changed_state_ids(result)
+    assert any('cannot create worker join tokens' in message for message in messages)
 
 
 def test_k0s_install_is_idempotent(host):

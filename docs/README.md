@@ -36,9 +36,6 @@ Supported binary download architectures: `amd64`, `arm64`, `aarch64`.
 k0s:
   role: single
   version: 'v1.30.2+k0s.0'
-  controller:
-    enable_worker: true
-    no_taints: true
   config:
     spec:
       telemetry:
@@ -62,17 +59,21 @@ systemctl status k0scontroller
 
 ## Salt Environment Requirements
 
-The formula uses custom state modules from `_states/`:
+The formula uses custom state modules from `k0s/_states/`:
 
 - `k0s_controller.installed`
 - `k0s_worker.installed`
 
-Before applying the states in a regular Salt master/minion environment,
-synchronize the custom state modules:
+Salt synchronizes custom state modules from an `_states` directory at the
+Salt file-root level. Before applying the formula in a regular Salt
+master/minion environment, expose `k0s/_states` as file-root `_states`
+using your deployment tooling, a copy, or a symlink, then synchronize the
+modules:
 
 ```bash
 salt '<minion-id>' saltutil.sync_states
 ```
 
 The formula must be available in Salt file roots so that `salt://k0s/...`
-resolves to the `k0s/` directory, and `_states/` must be available for sync.
+resolves to the `k0s/` directory, and the custom modules must be available
+as `_states/` for `saltutil.sync_states`.

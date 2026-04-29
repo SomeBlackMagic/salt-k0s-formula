@@ -15,9 +15,8 @@ k0s_config_directory:
 
 {%- if config_spec is none %}
 k0s_config_create:
-  cmd.run:
-    - name: /usr/local/bin/k0s config create > {{ config_path }}
-    - creates: {{ config_path }}
+  k0s_config.created:
+    - name: {{ config_path | yaml }}
     - require:
       - file: k0s_config_directory
       - file: k0s_binary_install
@@ -31,7 +30,7 @@ k0s_config_file:
     - group: root
     - mode: '0600'
     - require:
-      - cmd: k0s_config_create
+      - k0s_config: k0s_config_create
 {%- else %}
 k0s_config_file:
   file.managed:

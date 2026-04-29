@@ -1,7 +1,7 @@
 import importlib.util
 
 
-MODULE_PATH = '_states/k0s_controller.py'
+MODULE_PATH = 'k0s/_states/k0s_controller.py'
 
 
 def _load_state_module():
@@ -120,6 +120,52 @@ def test_installed_creates_unit_with_requested_arguments(tmp_path):
                 '--enable-worker',
                 '--no-taints',
                 '--debug',
+            ],
+            False,
+        )
+    ]
+
+
+def test_installed_creates_single_node_unit(tmp_path):
+    state = _load_state_module()
+    binary, config = _create_prerequisites(tmp_path)
+    unit_path = tmp_path / 'k0scontroller.service'
+    calls = []
+
+    def run_all(command, python_shell):
+        calls.append((command, python_shell))
+        _write_unit(
+            unit_path,
+            binary,
+            config,
+            '/var/lib/k0s',
+            ' --single=true',
+        )
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.installed(
+        'k0scontroller',
+        config=str(config),
+        data_dir='/var/lib/k0s',
+        binary=str(binary),
+        unit_path=str(unit_path),
+        single=True,
+    )
+
+    assert result['result'] is True
+    assert calls == [
+        (
+            [
+                str(binary),
+                'install',
+                'controller',
+                '--config',
+                str(config),
+                '--data-dir',
+                '/var/lib/k0s',
+                '--single',
             ],
             False,
         )

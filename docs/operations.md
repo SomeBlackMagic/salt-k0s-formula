@@ -25,6 +25,11 @@ Create a token on the controller node:
 salt '<controller-minion>' state.apply k0s.token
 ```
 
+This does not work for `k0s.role: single`; k0s single-node clusters cannot be
+extended with workers. Use `role: controller` with `controller.enable_worker`
+and `controller.no_taints` if the node should also run workloads but later
+accept workers.
+
 By default, the token is stored at:
 
 ```text

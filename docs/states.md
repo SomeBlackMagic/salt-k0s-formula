@@ -53,6 +53,7 @@ The module builds this command:
 
 Supported flags from pillar:
 
+- `k0s.role: single` -> `--single`
 - `k0s.controller.enable_worker` -> `--enable-worker`
 - `k0s.controller.no_taints` -> `--no-taints`
 - `k0s.extra_args` -> additional arguments
@@ -113,6 +114,9 @@ Creates a worker join token on the controller node:
 ```bash
 /usr/local/bin/k0s token create --role worker > /etc/k0s/worker-join-token
 ```
+
+This state is not supported for `k0s.role: single`, because k0s single-node
+clusters reject additional worker joins.
 
 The path is configured through `k0s.token.path`; TTL in hours is configured
 through `k0s.token.ttl`. If `ttl: 0`, an existing non-empty token file is always

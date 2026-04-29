@@ -135,7 +135,9 @@ k0s:
 - `enable_worker` adds `--enable-worker`.
 - `no_taints` adds `--no-taints`.
 
-Both options are usually needed for a single-node cluster.
+When `k0s.role` is `single`, the controller unit is installed with `--single`.
+Use `enable_worker` and `no_taints` for expandable single-node-like controller
+setups instead of the strict k0s single-node mode.
 
 ## `k0s.worker`
 

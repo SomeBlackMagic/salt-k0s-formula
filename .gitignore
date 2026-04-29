@@ -1,3 +1,7 @@
 .idea
 .kitchen
 .venv
+_states
+__pycache__/
+*.py[cod]
+reports/

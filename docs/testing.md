@@ -22,8 +22,8 @@ make unit_tests
 
 Unit tests cover the custom state modules:
 
-- `_states/k0s_controller.py`
-- `_states/k0s_worker.py`
+- `k0s/_states/k0s_controller.py`
+- `k0s/_states/k0s_worker.py`
 
 Main checks:
 
@@ -42,6 +42,11 @@ make integration_tests
 Integration tests run through Test Kitchen in a privileged Docker container.
 The current `.kitchen.yml` contains the `default` suite on the
 `salt-kitchen:ubuntu-22.04` image.
+
+The `integration_tests` target first creates a local `_states` symlink to
+`k0s/_states` when it is missing. This keeps the custom state modules inside
+the formula directory while still exposing them at the Salt file-root level,
+where `saltutil.sync_states` expects them.
 
 Tests are located in:
 

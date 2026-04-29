@@ -1,7 +1,7 @@
 import importlib.util
 
 
-MODULE_PATH = '_states/k0s_worker.py'
+MODULE_PATH = 'k0s/_states/k0s_worker.py'
 
 
 def _load_state_module():

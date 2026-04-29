@@ -3,11 +3,18 @@
 ## 1. Connect the Formula to Salt
 
 Place the repository, or its relevant contents, in Salt file roots. At minimum
-you need:
+you need the formula directory:
 
 ```text
-_states/
 k0s/
+```
+
+The custom state modules live in `k0s/_states/`. Salt syncs custom modules
+from `_states` at the file-root level, so expose them there with your deployment
+tooling, for example:
+
+```bash
+cp -r k0s/_states _states
 ```
 
 Example `top.sls`:
@@ -27,16 +34,13 @@ salt 'k0s-*' saltutil.sync_states
 ## 2. Single-Node Cluster
 
 Single-node mode uses the controller service `k0scontroller`.
-To run regular workload pods on the same node, enable the worker and remove
-the control-plane taint:
+It installs k0s with `--single`, which runs the controller and worker functions
+on the same node:
 
 ```yaml
 k0s:
   role: single
   version: 'v1.30.2+k0s.0'
-  controller:
-    enable_worker: true
-    no_taints: true
   config:
     spec:
       api:
