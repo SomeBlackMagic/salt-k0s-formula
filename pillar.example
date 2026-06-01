@@ -1,0 +1,74 @@
+k0s:
+  version: 'v1.30.2+k0s.0'
+  role: single  # single | controller | worker
+  config_path: /etc/k0s/k0s.yaml
+  data_dir: /var/lib/k0s
+
+  install:
+    binary_url: ''   # optional: custom download URL
+    checksum: ''     # optional: SHA256 checksum
+
+  config:
+    spec:
+      api:
+        address: ''
+        sans:
+          - k0s.local
+      network:
+        provider: kuberouter
+        podCIDR: 10.244.0.0/16
+        serviceCIDR: 10.96.0.0/12
+      storage:
+        type: etcd
+      telemetry:
+        enabled: false
+
+  controller:
+    enable_worker: false
+    no_taints: false
+
+  worker:
+    join_token: ''
+    api_address: ''
+    profile: default
+
+  token:
+    ttl: 24
+    path: /etc/k0s/worker-join-token
+
+  service:
+    enabled: true
+    running: true
+
+  # Kubernetes manifests to apply after the cluster is up.
+  # Each entry requires at least one of: source, content.
+  # Both may be specified simultaneously — they are concatenated before applying.
+  manifests:
+    # Apply a manifest from a file on the local filesystem.
+    - name: nginx-deployment
+      source: /srv/salt/k0s/files/manifests/nginx.yaml
+
+    # Apply an inline YAML manifest.
+    - name: coredns-configmap
+      content: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: coredns-custom
+          namespace: kube-system
+        data:
+          log.override: |
+            log
+
+    # Apply both a file and inline content together.
+    - name: app-namespace-and-quota
+      source: /srv/salt/k0s/files/manifests/namespace.yaml
+      content: |
+        apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: default-quota
+          namespace: my-app
+        spec:
+          hard:
+            pods: "10"

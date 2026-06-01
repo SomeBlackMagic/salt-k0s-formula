@@ -12,3 +12,4 @@ include:
   - k0s.controller
 {%- endif %}
   - k0s.service
+  - k0s.manifest

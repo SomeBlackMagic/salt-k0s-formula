@@ -30,3 +30,4 @@ k0s:
   service:
     enabled: true
     running: true
+  manifests: []
