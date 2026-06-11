@@ -89,7 +89,7 @@ def installed(
 
     if __opts__.get('test'):
         ret['result'] = None
-        ret['changes'] = {'unit': {'old': initial_unit_status['comment'], 'new': 'installed'}}
+        ret['changes'] = {'unit': {'old': initial_unit_status['previous'], 'new': 'installed'}}
         ret['comment'] = 'k0s controller unit would be installed with: {0}'.format(
             ' '.join(shlex.quote(part) for part in install_command)
         )

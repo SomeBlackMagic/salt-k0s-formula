@@ -36,6 +36,21 @@ def test_created_reports_pending_change_in_test_mode(tmp_path):
     assert not config.exists()
 
 
+def test_created_fails_when_path_is_a_directory(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    config_dir = tmp_path / 'k0s.yaml'
+    config_dir.mkdir()
+    calls = []
+    state.__salt__ = {'cmd.run_all': calls.append}
+
+    result = state.created(str(config_dir), binary=str(binary))
+
+    assert result['result'] is False
+    assert 'not a regular file' in result['comment']
+    assert calls == []
+
+
 def test_created_is_idempotent_when_config_exists(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
@@ -73,6 +88,24 @@ def test_created_writes_generated_config(tmp_path):
     assert result['changes']['config']['old'] == 'missing'
     assert config.read_text() == 'apiVersion: k0s.k0sproject.io/v1beta1\n'
     assert calls == [([str(binary), 'config', 'create'], False)]
+
+
+def test_created_handles_none_stdout_without_error(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    config = tmp_path / 'k0s.yaml'
+    state.__salt__ = {
+        'cmd.run_all': lambda command, python_shell: {
+            'retcode': 0,
+            'stdout': None,
+            'stderr': '',
+        }
+    }
+
+    result = state.created(str(config), binary=str(binary))
+
+    assert result['result'] is True
+    assert config.read_text() == ''
 
 
 def test_created_fails_clearly_when_command_fails(tmp_path):

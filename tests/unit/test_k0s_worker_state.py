@@ -60,6 +60,7 @@ def test_installed_reports_pending_change_in_test_mode(tmp_path):
     )
 
     assert result['result'] is None
+    assert result['changes']['unit']['old'] == 'missing'
     assert result['changes']['unit']['new'] == 'installed'
     assert calls == []
 
@@ -152,6 +153,9 @@ def test_installed_is_idempotent_when_unit_matches(tmp_path):
         'default',
         '/var/lib/k0s',
     )
+    api_server_checks = []
+    original_supports = state._worker_install_supports_api_server
+    state._worker_install_supports_api_server = lambda b: api_server_checks.append(b) or True
     calls = []
     state.__salt__ = {'cmd.run_all': calls.append}
 
@@ -168,6 +172,7 @@ def test_installed_is_idempotent_when_unit_matches(tmp_path):
     assert result['result'] is True
     assert result['changes'] == {}
     assert calls == []
+    assert api_server_checks == []
 
 
 def test_installed_uses_force_when_existing_unit_arguments_change(tmp_path):

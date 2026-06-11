@@ -11,6 +11,6 @@ k0s_manifest_{{ manifest.name | default('manifest_' + loop.index | string) }}:
     {%- endif %}
     {%- if manifest.content is defined %}
     - content: |
-        {{ manifest.content | indent(8) }}
+        {{ manifest.content | indent(8, first=False, blank=True) }}
     {%- endif %}
 {%- endfor %}

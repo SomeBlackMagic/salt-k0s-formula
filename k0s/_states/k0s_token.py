@@ -56,7 +56,7 @@ def created(name, ttl=24, role='worker', binary=DEFAULT_BINARY):
         ret['comment'] = _command_failure_comment(result)
         return ret
 
-    token = result.get('stdout', '').strip()
+    token = (result.get('stdout') or '').strip()
     if not token:
         ret['result'] = False
         ret['comment'] = 'k0s token create returned an empty token.'

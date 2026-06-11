@@ -53,6 +53,7 @@ def test_installed_reports_pending_change_in_test_mode(tmp_path):
     )
 
     assert result['result'] is None
+    assert result['changes']['unit']['old'] == 'missing'
     assert result['changes']['unit']['new'] == 'installed'
     assert calls == []
 

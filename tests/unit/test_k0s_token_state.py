@@ -93,6 +93,25 @@ def test_created_replaces_expired_token(tmp_path):
     assert calls == [([str(binary), 'token', 'create', '--role', 'worker'], False)]
 
 
+def test_created_fails_when_stdout_is_none(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    token = tmp_path / 'worker-token'
+    state.__salt__ = {
+        'cmd.run_all': lambda command, python_shell: {
+            'retcode': 0,
+            'stdout': None,
+            'stderr': '',
+        }
+    }
+
+    result = state.created(str(token), binary=str(binary))
+
+    assert result['result'] is False
+    assert 'empty token' in result['comment']
+    assert not token.exists()
+
+
 def test_created_fails_when_command_returns_empty_token(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)

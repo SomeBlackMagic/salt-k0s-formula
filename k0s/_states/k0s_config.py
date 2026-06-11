@@ -21,8 +21,13 @@ def created(name, binary=DEFAULT_BINARY):
         'comment': '',
     }
 
-    if os.path.exists(name):
+    if os.path.isfile(name):
         ret['comment'] = 'k0s configuration file already exists.'
+        return ret
+
+    if os.path.exists(name):
+        ret['result'] = False
+        ret['comment'] = '{0} exists but is not a regular file.'.format(name)
         return ret
 
     missing = _missing_prerequisites(binary, name)
@@ -46,7 +51,7 @@ def created(name, binary=DEFAULT_BINARY):
         ret['comment'] = _command_failure_comment(result)
         return ret
 
-    _write_file(name, result.get('stdout', ''))
+    _write_file(name, result.get('stdout') or '')
 
     ret['changes'] = {'config': {'old': 'missing', 'new': name}}
     ret['comment'] = 'k0s configuration file was created.'

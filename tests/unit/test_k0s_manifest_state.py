@@ -81,6 +81,36 @@ def test_applied_fails_when_content_is_not_a_string(tmp_path):
     assert 'content must be a string' in result['comment']
 
 
+def test_applied_fails_when_content_is_empty_string(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content='')
+
+    assert result['result'] is False
+    assert 'content must not be empty' in result['comment']
+
+
+def test_applied_fails_when_content_is_whitespace_only(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content='   \n  ')
+
+    assert result['result'] is False
+    assert 'content must not be empty' in result['comment']
+
+
+def test_applied_fails_when_content_is_only_a_separator(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content='---')
+
+    assert result['result'] is False
+    assert 'content must not be empty' in result['comment']
+
+
 def test_applied_fails_when_binary_is_missing(tmp_path):
     state = _load_state_module()
 
@@ -100,6 +130,28 @@ def test_applied_fails_when_source_file_is_missing(tmp_path):
     assert '/nonexistent/manifest.yaml' in result['comment']
 
 
+def test_applied_uses_content_when_source_file_is_missing(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx created\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source='/nonexistent/manifest.yaml',
+        content=NGINX_DEPLOYMENT,
+    )
+
+    assert result['result'] is True
+    assert calls[0]['stdin'] == NGINX_DEPLOYMENT
+
+
 # --- test mode ---
 
 
@@ -113,7 +165,8 @@ def test_applied_reports_pending_change_in_test_mode_with_content(tmp_path):
     result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
 
     assert result['result'] is None
-    assert result['changes']['manifests']['new'] == 'applied'
+    assert result['changes'] == {}
+    assert 'would be applied' in result['comment']
     assert calls == []
 
 
@@ -128,7 +181,8 @@ def test_applied_reports_pending_change_in_test_mode_with_source(tmp_path):
     result = state.applied('test', binary=str(binary), source=str(source))
 
     assert result['result'] is None
-    assert result['changes']['manifests']['new'] == 'applied'
+    assert result['changes'] == {}
+    assert 'would be applied' in result['comment']
     assert calls == []
 
 
@@ -202,15 +256,6 @@ def test_applied_reports_created_resources_in_changes(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
 
-    state.__salt__ = {
-        'cmd.run_all': lambda **_: None or {
-            'retcode': 0,
-            'stdout': 'deployment.apps/nginx created\nservice/nginx created\n',
-            'stderr': '',
-        }
-    }
-
-    # Use a simpler lambda compatible with positional args
     def run_all(command, python_shell, stdin):
         return {'retcode': 0, 'stdout': 'deployment.apps/nginx created\nservice/nginx created\n', 'stderr': ''}
 
@@ -238,6 +283,21 @@ def test_applied_reports_configured_resources_in_changes(tmp_path):
     assert 'deployment.apps/nginx' in result['changes']['manifests']['configured']
 
 
+def test_applied_reports_server_side_applied_resources_in_changes(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx serverside-applied\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
+
+    assert result['result'] is True
+    assert 'deployment.apps/nginx' in result['changes']['manifests']['serverside-applied']
+
+
 def test_applied_reports_no_changes_when_all_unchanged(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
@@ -254,7 +314,82 @@ def test_applied_reports_no_changes_when_all_unchanged(tmp_path):
     assert 'up to date' in result['comment']
 
 
+# --- separator deduplication ---
+
+
+def test_applied_does_not_strip_trailing_separator_from_single_part(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    content_with_separator = NGINX_DEPLOYMENT + '\n---'
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=content_with_separator)
+
+    assert result['result'] is True
+    assert calls[0]['stdin'] == content_with_separator
+
+
+def test_applied_strips_trailing_separator_from_source_before_concatenation(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, NGINX_DEPLOYMENT + '\n---')
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), source=str(source), content=NGINX_SERVICE)
+
+    assert result['result'] is True
+    stdin = calls[0]['stdin']
+    assert '---\n---' not in stdin
+
+
+def test_applied_strips_trailing_separator_from_content_before_concatenation(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, NGINX_DEPLOYMENT)
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), source=str(source), content=NGINX_SERVICE + '\n---')
+
+    assert result['result'] is True
+    stdin = calls[0]['stdin']
+    assert '---\n---' not in stdin
+
+
 # --- failure ---
+
+
+def test_applied_handles_none_stdout_without_error(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 0, 'stdout': None, 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
+
+    assert result['result'] is True
+    assert result['changes'] == {}
+    assert 'up to date' in result['comment']
 
 
 def test_applied_fails_clearly_when_kubectl_returns_nonzero(tmp_path):

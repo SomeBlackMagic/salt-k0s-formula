@@ -58,6 +58,11 @@ def installed(
         ret['comment'] = 'systemd is required to install {0}.'.format(unit_path)
         return ret
 
+    initial_unit_status = _unit_status(unit_path, desired_args)
+    if initial_unit_status['result']:
+        ret['comment'] = 'k0s worker unit is already installed with the requested arguments.'
+        return ret
+
     install_supports_api_server = _worker_install_supports_api_server(binary)
     install_command = _install_command(
         binary=binary,
@@ -69,11 +74,6 @@ def installed(
         force=False,
         include_api_server=install_supports_api_server,
     )
-
-    initial_unit_status = _unit_status(unit_path, desired_args)
-    if initial_unit_status['result']:
-        ret['comment'] = 'k0s worker unit is already installed with the requested arguments.'
-        return ret
 
     if initial_unit_status['previous'] != 'missing':
         install_command = _install_command(
@@ -89,7 +89,7 @@ def installed(
 
     if __opts__.get('test'):
         ret['result'] = None
-        ret['changes'] = {'unit': {'old': initial_unit_status['comment'], 'new': 'installed'}}
+        ret['changes'] = {'unit': {'old': initial_unit_status['previous'], 'new': 'installed'}}
         ret['comment'] = 'k0s worker unit would be installed with: {0}'.format(
             ' '.join(shlex.quote(part) for part in install_command)
         )
@@ -210,7 +210,7 @@ def _worker_install_supports_api_server(binary):
         [binary, 'install', 'worker', '--help'],
         python_shell=False,
     )
-    output = '{0}\n{1}'.format(result.get('stdout', ''), result.get('stderr', ''))
+    output = '{0}\n{1}'.format(result.get('stdout') or '', result.get('stderr') or '')
     for line in output.splitlines():
         stripped = line.strip()
         if stripped == '--api-server' or stripped.startswith('--api-server '):
