@@ -43,6 +43,9 @@ k0s:
   # Kubernetes manifests to apply after the cluster is up.
   # Each entry requires at least one of: source, content.
   # Both may be specified simultaneously — they are concatenated before applying.
+  #
+  # Optional wait conditions (kubectl wait) may be added per manifest.
+  # Each condition requires: for, resource. Optional: timeout, namespace.
   manifests:
     # Apply a manifest from a file on the local filesystem.
     - name: nginx-deployment
@@ -72,3 +75,38 @@ k0s:
         spec:
           hard:
             pods: "10"
+
+    # Apply CRDs and wait for them to be established before proceeding.
+    - name: my-crds
+      source: /srv/salt/k0s/files/manifests/crds.yaml
+      wait:
+        - for: condition=Established
+          resource: crd/myresources.example.com
+          timeout: 60s
+
+    # Apply a deployment and wait for it to become available in a specific namespace.
+    - name: my-app
+      content: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: my-app
+          namespace: prod
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: my-app
+          template:
+            metadata:
+              labels:
+                app: my-app
+            spec:
+              containers:
+                - name: my-app
+                  image: my-app:latest
+      wait:
+        - for: condition=Available
+          resource: deployment/my-app
+          namespace: prod
+          timeout: 120s
