@@ -11,7 +11,7 @@ def __virtual__():
     return __virtualname__
 
 
-def applied(name, binary=DEFAULT_BINARY, source=None, content=None):
+def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
     '''
     Apply Kubernetes manifests via k0s kubectl apply.
 
@@ -29,6 +29,36 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None):
 
     content
         Inline YAML manifest string.
+
+    wait
+        Optional list of conditions to wait for after apply. Each item is a
+        dict with the following keys:
+
+        for (required)
+            The condition expression passed to --for, e.g.
+            ``condition=Established`` or ``condition=Ready``.
+
+        resource (required)
+            The resource reference, e.g. ``crd/myresources.example.com`` or
+            ``deployment/my-app``.
+
+        timeout (optional)
+            Timeout duration string passed to --timeout, e.g. ``60s`` or
+            ``2m``. If omitted, kubectl uses its own default (30s).
+
+        namespace (optional)
+            Namespace passed to -n. Required for namespace-scoped resources.
+
+    Example pillar::
+
+        k0s:
+          manifests:
+            - name: my-crds
+              source: /srv/salt/files/crds.yaml
+              wait:
+                - for: condition=Established
+                  resource: crd/myresources.example.com
+                  timeout: 60s
     '''
     ret = {
         'name': name,
@@ -41,6 +71,13 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None):
         ret['result'] = False
         ret['comment'] = 'At least one of source or content must be provided.'
         return ret
+
+    if wait is not None:
+        wait_error = _validate_wait(wait)
+        if wait_error:
+            ret['result'] = False
+            ret['comment'] = wait_error
+            return ret
 
     if content is not None and not isinstance(content, str):
         ret['result'] = False
@@ -80,7 +117,11 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None):
 
     if __opts__.get('test'):
         ret['result'] = None
-        ret['comment'] = 'Manifests would be applied with: {0}'.format(' '.join(command))
+        comment = 'Manifests would be applied with: {0}'.format(' '.join(command))
+        if wait:
+            wait_commands = [' '.join(_build_wait_command(binary, c)) for c in wait]
+            comment += '\nWould wait with: {0}'.format('; '.join(wait_commands))
+        ret['comment'] = comment
         return ret
 
     result = __salt__['cmd.run_all'](
@@ -103,7 +144,66 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None):
     else:
         ret['comment'] = 'Manifests are already up to date.'
 
+    if wait:
+        for condition in wait:
+            wait_command = _build_wait_command(binary, condition)
+            wait_result = __salt__['cmd.run_all'](wait_command, python_shell=False)
+            if wait_result.get('retcode') != 0:
+                ret['result'] = False
+                ret['comment'] = _wait_failure_comment(wait_result, condition)
+                return ret
+
     return ret
+
+
+_WAIT_KNOWN_KEYS = {'for', 'resource', 'timeout', 'namespace'}
+_WAIT_STRING_KEYS = ('for', 'resource', 'timeout', 'namespace')
+
+
+def _validate_wait(wait):
+    if not isinstance(wait, list):
+        return 'wait must be a list.'
+    for i, condition in enumerate(wait):
+        if not isinstance(condition, dict):
+            return 'wait[{0}] must be a dict.'.format(i)
+        unknown = set(condition) - _WAIT_KNOWN_KEYS
+        if unknown:
+            return 'wait[{0}] contains unknown key(s): {1}.'.format(
+                i, ', '.join(sorted(unknown))
+            )
+        if 'for' not in condition:
+            return 'wait[{0}] is missing required key "for".'.format(i)
+        if 'resource' not in condition:
+            return 'wait[{0}] is missing required key "resource".'.format(i)
+        for key in _WAIT_STRING_KEYS:
+            if key in condition and not isinstance(condition[key], str):
+                return 'wait[{0}]["{1}"] must be a string.'.format(i, key)
+        if not condition['for'].strip():
+            return 'wait[{0}]["for"] must not be empty.'.format(i)
+        if not condition['resource'].strip():
+            return 'wait[{0}]["resource"] must not be empty.'.format(i)
+    return None
+
+
+def _build_wait_command(binary, condition):
+    command = [binary, 'kubectl', 'wait',
+               '--for={0}'.format(condition['for']),
+               condition['resource']]
+    if 'namespace' in condition:
+        command.extend(['-n', condition['namespace']])
+    if 'timeout' in condition:
+        command.append('--timeout={0}'.format(condition['timeout']))
+    return command
+
+
+def _wait_failure_comment(result, condition):
+    output = result.get('stderr') or result.get('stdout') or 'no output'
+    return 'k0s kubectl wait failed for {0} (--for={1}) with exit code {2}: {3}'.format(
+        condition['resource'],
+        condition['for'],
+        result.get('retcode'),
+        output.strip(),
+    )
 
 
 def _read_source(source):

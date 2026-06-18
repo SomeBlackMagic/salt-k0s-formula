@@ -406,3 +406,273 @@ def test_applied_fails_clearly_when_kubectl_returns_nonzero(tmp_path):
     assert result['result'] is False
     assert 'k0s kubectl apply failed' in result['comment']
     assert 'invalid manifest' in result['comment']
+
+
+# --- wait conditions ---
+
+
+WAIT_CONDITION = {'for': 'condition=Established', 'resource': 'crd/myresources.example.com'}
+
+
+def test_applied_fails_when_wait_is_not_a_list(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait='bad')
+
+    assert result['result'] is False
+    assert 'wait must be a list' in result['comment']
+
+
+def test_applied_fails_when_wait_item_is_not_a_dict(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait=['bad'])
+
+    assert result['result'] is False
+    assert 'wait[0] must be a dict' in result['comment']
+
+
+def test_applied_fails_when_wait_item_missing_for(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'resource': 'crd/foo'}])
+
+    assert result['result'] is False
+    assert 'missing required key "for"' in result['comment']
+
+
+def test_applied_fails_when_wait_item_missing_resource(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': 'condition=Established'}])
+
+    assert result['result'] is False
+    assert 'missing required key "resource"' in result['comment']
+
+
+def test_applied_runs_wait_after_successful_apply(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return {'retcode': 0, 'stdout': 'crd/myresources.example.com created\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[WAIT_CONDITION])
+
+    assert result['result'] is True
+    assert len(calls) == 2
+    wait_cmd = calls[1]
+    assert wait_cmd[1] == 'kubectl'
+    assert wait_cmd[2] == 'wait'
+    assert '--for=condition=Established' in wait_cmd
+    assert 'crd/myresources.example.com' in wait_cmd
+
+
+def test_applied_wait_includes_timeout_when_specified(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    condition = {'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}
+    state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait=[condition])
+
+    assert '--timeout=60s' in calls[1]
+
+
+def test_applied_wait_includes_namespace_when_specified(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    condition = {'for': 'condition=Ready', 'resource': 'deployment/app', 'namespace': 'prod'}
+    state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait=[condition])
+
+    assert '-n' in calls[1]
+    assert 'prod' in calls[1]
+
+
+def test_applied_fails_when_wait_command_fails(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    call_count = [0]
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return {'retcode': 0, 'stdout': 'crd/foo created\n', 'stderr': ''}
+        return {'retcode': 1, 'stdout': '', 'stderr': 'timed out waiting for the condition'}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[WAIT_CONDITION])
+
+    assert result['result'] is False
+    assert 'k0s kubectl wait failed' in result['comment']
+    assert 'timed out' in result['comment']
+
+
+def test_applied_wait_reported_in_test_mode(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+    calls = []
+    state.__salt__ = {'cmd.run_all': calls.append}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[WAIT_CONDITION])
+
+    assert result['result'] is None
+    assert 'would be applied' in result['comment']
+    assert 'Would wait with' in result['comment']
+    assert calls == []
+
+
+def test_applied_fails_when_wait_item_has_unknown_key(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': 'condition=Established', 'resource': 'crd/foo', 'timout': '60s'}])
+
+    assert result['result'] is False
+    assert 'unknown key' in result['comment']
+    assert 'timout' in result['comment']
+
+
+def test_applied_fails_when_wait_for_is_empty_string(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': '', 'resource': 'crd/foo'}])
+
+    assert result['result'] is False
+    assert 'must not be empty' in result['comment']
+    assert '"for"' in result['comment']
+
+
+def test_applied_fails_when_wait_resource_is_empty_string(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': 'condition=Established', 'resource': ''}])
+
+    assert result['result'] is False
+    assert 'must not be empty' in result['comment']
+    assert '"resource"' in result['comment']
+
+
+def test_applied_fails_when_wait_for_is_not_a_string(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': None, 'resource': 'crd/foo'}])
+
+    assert result['result'] is False
+    assert 'must be a string' in result['comment']
+    assert '"for"' in result['comment']
+
+
+def test_applied_fails_when_wait_resource_is_not_a_string(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[{'for': 'condition=Established', 'resource': 42}])
+
+    assert result['result'] is False
+    assert 'must be a string' in result['comment']
+    assert '"resource"' in result['comment']
+
+
+def test_applied_runs_wait_even_when_no_changes(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return {'retcode': 0, 'stdout': 'crd/foo unchanged\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[WAIT_CONDITION])
+
+    assert result['result'] is True
+    assert result['changes'] == {}
+    assert len(calls) == 2  # apply + wait
+
+
+def test_applied_preserves_changes_when_second_wait_fails(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    call_count = [0]
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return {'retcode': 0, 'stdout': 'crd/foo created\n', 'stderr': ''}
+        if call_count[0] == 2:
+            return {'retcode': 0, 'stdout': '', 'stderr': ''}
+        return {'retcode': 1, 'stdout': '', 'stderr': 'timed out waiting for the condition'}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    conditions = [
+        {'for': 'condition=Established', 'resource': 'crd/foo'},
+        {'for': 'condition=Established', 'resource': 'crd/bar'},
+    ]
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait=conditions)
+
+    assert result['result'] is False
+    assert 'timed out' in result['comment']
+    assert result['changes'] == {'manifests': {'created': ['crd/foo']}}
+
+
+def test_applied_runs_multiple_wait_conditions_in_order(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    conditions = [
+        {'for': 'condition=Established', 'resource': 'crd/foo'},
+        {'for': 'condition=Established', 'resource': 'crd/bar'},
+    ]
+    state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT, wait=conditions)
+
+    assert len(calls) == 3  # 1 apply + 2 wait
+    assert 'crd/foo' in calls[1]
+    assert 'crd/bar' in calls[2]

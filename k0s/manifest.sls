@@ -13,4 +13,7 @@ k0s_manifest_{{ manifest.name | default('manifest_' + loop.index | string) }}:
     - content: |
         {{ manifest.content | indent(8, first=False, blank=True) }}
     {%- endif %}
+    {%- if manifest.wait is defined %}
+    - wait: {{ manifest.wait | tojson }}
+    {%- endif %}
 {%- endfor %}
