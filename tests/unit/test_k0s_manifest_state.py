@@ -676,3 +676,250 @@ def test_applied_runs_multiple_wait_conditions_in_order(tmp_path):
     assert len(calls) == 3  # 1 apply + 2 wait
     assert 'crd/foo' in calls[1]
     assert 'crd/bar' in calls[2]
+
+
+# --- two-step apply: source + content + wait ---
+
+CRD_MANIFEST = '''\
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clustersecretstores.external-secrets.io
+spec:
+  group: external-secrets.io
+  names:
+    kind: ClusterSecretStore
+    plural: clustersecretstores
+  scope: Cluster
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      schema:
+        openAPIV3Schema:
+          type: object
+'''
+
+SECRET_STORE_MANIFEST = '''\
+apiVersion: external-secrets.io/v1
+kind: ClusterSecretStore
+metadata:
+  name: infra
+spec:
+  provider: {}
+'''
+
+CRD_WAIT_CONDITION = {
+    'for': 'condition=Established',
+    'resource': 'crd/clustersecretstores.external-secrets.io',
+    'timeout': '60s',
+}
+
+
+def test_applied_with_source_content_and_wait_uses_two_apply_calls(tmp_path):
+    """source + content + wait must apply source and content in separate kubectl calls."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=[CRD_WAIT_CONDITION],
+    )
+
+    assert result['result'] is True
+    apply_calls = [c for c in calls if c['stdin'] is not None]
+    assert len(apply_calls) == 2
+    assert apply_calls[0]['stdin'] == CRD_MANIFEST
+    assert apply_calls[1]['stdin'] == SECRET_STORE_MANIFEST
+
+
+def test_applied_with_source_content_and_wait_call_sequence_is_apply_wait_apply_wait(tmp_path):
+    """Call order must be: apply(source) → wait → apply(content) → final wait."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=[CRD_WAIT_CONDITION],
+    )
+
+    assert len(calls) == 4
+    assert calls[0]['stdin'] == CRD_MANIFEST   # apply source
+    assert 'wait' in calls[1]['command']        # wait between steps
+    assert calls[1]['stdin'] is None
+    assert calls[2]['stdin'] == SECRET_STORE_MANIFEST  # apply content
+    assert 'wait' in calls[3]['command']        # final wait
+    assert calls[3]['stdin'] is None
+
+
+def test_applied_with_source_content_and_wait_stops_if_mid_wait_fails(tmp_path):
+    """If wait between steps fails, content must not be applied."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+    applied_stdinns = []
+    call_count = [0]
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        if stdin is not None:
+            applied_stdinns.append(stdin)
+        if call_count[0] == 1:
+            return {'retcode': 0, 'stdout': 'crd/clustersecretstores.external-secrets.io created\n', 'stderr': ''}
+        return {'retcode': 1, 'stdout': '', 'stderr': 'timed out waiting for the condition'}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=[CRD_WAIT_CONDITION],
+    )
+
+    assert result['result'] is False
+    assert 'k0s kubectl wait failed' in result['comment']
+    assert 'timed out' in result['comment']
+    assert SECRET_STORE_MANIFEST not in applied_stdinns
+    assert call_count[0] == 2  # apply source + failed wait
+
+
+def test_applied_with_source_content_and_wait_merges_changes_from_both_steps(tmp_path):
+    """Changes reported by both apply calls must be merged into result['changes']."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+
+    def run_all(command, python_shell, stdin=None):
+        if stdin == CRD_MANIFEST:
+            return {'retcode': 0, 'stdout': 'crd/clustersecretstores.external-secrets.io created\n', 'stderr': ''}
+        if stdin == SECRET_STORE_MANIFEST:
+            return {'retcode': 0, 'stdout': 'clustersecretstore.external-secrets.io/infra created\n', 'stderr': ''}
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=[CRD_WAIT_CONDITION],
+    )
+
+    assert result['result'] is True
+    created = result['changes']['manifests']['created']
+    assert 'crd/clustersecretstores.external-secrets.io' in created
+    assert 'clustersecretstore.external-secrets.io/infra' in created
+
+
+def test_applied_with_source_content_and_wait_stops_if_content_apply_fails(tmp_path):
+    """If applying content fails after a successful wait, an error is returned."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+
+    def run_all(command, python_shell, stdin=None):
+        if stdin == CRD_MANIFEST:
+            return {'retcode': 0, 'stdout': 'crd/clustersecretstores.external-secrets.io created\n', 'stderr': ''}
+        if stdin == SECRET_STORE_MANIFEST:
+            return {'retcode': 1, 'stdout': '', 'stderr': 'no matches for kind "ClusterSecretStore"'}
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=[CRD_WAIT_CONDITION],
+    )
+
+    assert result['result'] is False
+    assert 'k0s kubectl apply failed' in result['comment']
+    assert 'ClusterSecretStore' in result['comment']
+
+
+def test_applied_with_source_and_content_without_wait_still_concatenates(tmp_path):
+    """Without wait, source+content must still be applied in a single kubectl call."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+    )
+
+    assert result['result'] is True
+    assert len(calls) == 1
+    assert CRD_MANIFEST in calls[0]['stdin']
+    assert SECRET_STORE_MANIFEST in calls[0]['stdin']
+
+
+def test_applied_with_source_content_and_multiple_wait_conditions_runs_all_between_steps(tmp_path):
+    """All wait conditions must run between source and content apply steps."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path, CRD_MANIFEST)
+    calls = []
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    conditions = [
+        {'for': 'condition=Established', 'resource': 'crd/foo'},
+        {'for': 'condition=Established', 'resource': 'crd/bar'},
+    ]
+    state.applied(
+        'test',
+        binary=str(binary),
+        source=str(source),
+        content=SECRET_STORE_MANIFEST,
+        wait=conditions,
+    )
+
+    # apply(source), wait(foo), wait(bar), apply(content), wait(foo), wait(bar)
+    assert len(calls) == 6
+    assert calls[0]['stdin'] == CRD_MANIFEST
+    assert 'crd/foo' in calls[1]['command']
+    assert 'crd/bar' in calls[2]['command']
+    assert calls[3]['stdin'] == SECRET_STORE_MANIFEST
+    assert 'crd/foo' in calls[4]['command']
+    assert 'crd/bar' in calls[5]['command']

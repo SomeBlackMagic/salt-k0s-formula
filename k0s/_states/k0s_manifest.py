@@ -94,8 +94,7 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
         ret['comment'] = 'Missing required file: {0}.'.format(binary)
         return ret
 
-    manifest_parts = []
-
+    source_content = None
     if source is not None:
         source_result = _read_source(source)
         if not source_result['result']:
@@ -104,16 +103,27 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
                 ret['comment'] = source_result['comment']
                 return ret
         else:
-            manifest_parts.append(source_result['content'])
+            source_content = source_result['content']
 
-    if content is not None:
-        manifest_parts.append(content)
-
-    if len(manifest_parts) == 1:
-        combined = manifest_parts[0]
-    else:
-        combined = '\n---\n'.join(_strip_trailing_separator(part) for part in manifest_parts)
     command = [binary, 'kubectl', 'apply', '-f', '-']
+
+    # When both source and content are provided with wait conditions, apply them
+    # separately so that wait runs between source and content. This allows
+    # content to depend on resources (e.g. CRDs) defined in source.
+    apply_steps = []
+    if source_content is not None and content is not None and wait:
+        apply_steps.append(source_content)
+        apply_steps.append(content)
+    else:
+        parts = []
+        if source_content is not None:
+            parts.append(source_content)
+        if content is not None:
+            parts.append(content)
+        if len(parts) == 1:
+            apply_steps.append(parts[0])
+        else:
+            apply_steps.append('\n---\n'.join(_strip_trailing_separator(p) for p in parts))
 
     if __opts__.get('test'):
         ret['result'] = None
@@ -124,22 +134,36 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
         ret['comment'] = comment
         return ret
 
-    result = __salt__['cmd.run_all'](
-        command,
-        python_shell=False,
-        stdin=combined,
-    )
+    all_changes = {}
+    for step_index, manifest in enumerate(apply_steps):
+        result = __salt__['cmd.run_all'](
+            command,
+            python_shell=False,
+            stdin=manifest,
+        )
 
-    if result.get('retcode') != 0:
-        ret['result'] = False
-        ret['comment'] = _command_failure_comment(result)
-        return ret
+        if result.get('retcode') != 0:
+            ret['result'] = False
+            ret['comment'] = _command_failure_comment(result)
+            return ret
 
-    stdout = result.get('stdout') or ''
-    changes = _parse_changes(stdout)
+        stdout = result.get('stdout') or ''
+        step_changes = _parse_changes(stdout)
+        for key, values in step_changes.items():
+            all_changes.setdefault(key, []).extend(values)
 
-    if changes:
-        ret['changes'] = {'manifests': changes}
+        # Run wait between steps (after source, before content)
+        if wait and step_index < len(apply_steps) - 1:
+            for condition in wait:
+                wait_command = _build_wait_command(binary, condition)
+                wait_result = __salt__['cmd.run_all'](wait_command, python_shell=False)
+                if wait_result.get('retcode') != 0:
+                    ret['result'] = False
+                    ret['comment'] = _wait_failure_comment(wait_result, condition)
+                    return ret
+
+    if all_changes:
+        ret['changes'] = {'manifests': all_changes}
         ret['comment'] = 'Manifests were applied.'
     else:
         ret['comment'] = 'Manifests are already up to date.'
