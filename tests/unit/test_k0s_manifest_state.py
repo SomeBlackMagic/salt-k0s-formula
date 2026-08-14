@@ -805,3 +805,108 @@ def test_applied_with_source_content_and_wait_runs_wait_then_single_apply(tmp_pa
     assert calls[0]['stdin'] is None
     assert NGINX_DEPLOYMENT in calls[1]['stdin']
     assert SECRET_STORE_MANIFEST in calls[1]['stdin']
+
+# --- wait retry on NotFound ---
+
+
+def test_wait_retries_when_resource_not_found(tmp_path):
+    """wait must retry kubectl wait when the resource is not found yet."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    call_count = [0]
+    slept = []
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return {'retcode': 1, 'stdout': '', 'stderr': 'Error from server (NotFound): customresourcedefinitions.apiextensions.k8s.io "foo.example.com" not found'}
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    condition = {'for': 'condition=Established', 'resource': 'crd/foo.example.com', 'timeout': '60s'}
+    result = state._run_wait(str(binary), condition, _sleep=slept.append)
+
+    assert result['retcode'] == 0
+    assert call_count[0] == 2
+    assert slept == [2]
+
+
+def test_wait_stops_retrying_after_deadline(tmp_path):
+    """wait must stop retrying and report failure when deadline is exceeded."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    calls = []
+    slept = []
+    not_found_response = {'retcode': 1, 'stdout': '', 'stderr': 'Error from server (NotFound): not found'}
+
+    def run_all(command, python_shell, stdin=None):
+        calls.append(command)
+        return not_found_response
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    # 1s timeout so deadline passes quickly; _sleep is mocked but time.time() advances
+    condition = {'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '1s'}
+
+    import time as real_time
+    tick = [real_time.time()]
+
+    def fake_sleep(s):
+        slept.append(s)
+        # advance simulated time past deadline on first sleep
+        tick[0] += 10
+
+    original_time = state.time if hasattr(state, 'time') else None
+
+    import unittest.mock as mock
+    with mock.patch('time.time', side_effect=lambda: tick[0]):
+        result = state._run_wait(str(binary), condition, _sleep=fake_sleep)
+
+    assert result['retcode'] == 1
+    assert 'not found' in result['stderr']
+
+
+def test_wait_does_not_retry_on_non_notfound_error(tmp_path):
+    """wait must not retry on errors that are not NotFound."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    call_count = [0]
+    slept = []
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        return {'retcode': 1, 'stdout': '', 'stderr': 'timed out waiting for the condition'}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    condition = {'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}
+    result = state._run_wait(str(binary), condition, _sleep=slept.append)
+
+    assert result['retcode'] == 1
+    assert call_count[0] == 1
+    assert slept == []
+
+
+def test_applied_retries_wait_when_resource_not_found(tmp_path):
+    """applied() must retry wait transparently when resource is not found."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    call_count = [0]
+
+    def run_all(command, python_shell, stdin=None):
+        call_count[0] += 1
+        if 'wait' in command and call_count[0] == 1:
+            return {'retcode': 1, 'stdout': '', 'stderr': 'Error from server (NotFound): not found'}
+        return {'retcode': 0, 'stdout': 'crd/foo created\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    # patch _sleep inside _run_wait so test does not actually sleep
+    import unittest.mock as mock
+    condition = {'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}
+    with mock.patch('time.sleep'):
+        result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                               wait=[condition])
+
+    assert result['result'] is True

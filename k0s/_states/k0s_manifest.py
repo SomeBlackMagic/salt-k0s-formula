@@ -1,5 +1,6 @@
 import os
 import re
+import time
 
 
 __virtualname__ = 'k0s_manifest'
@@ -130,8 +131,7 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
     # Run wait conditions as pre-conditions before any apply.
     if wait:
         for condition in wait:
-            wait_command = _build_wait_command(binary, condition)
-            wait_result = __salt__['cmd.run_all'](wait_command, python_shell=False)
+            wait_result = _run_wait(binary, condition)
             if wait_result.get('retcode') != 0:
                 ret['result'] = False
                 ret['comment'] = _wait_failure_comment(wait_result, condition)
@@ -197,6 +197,44 @@ def _build_wait_command(binary, condition):
     if 'timeout' in condition:
         command.append('--timeout={0}'.format(condition['timeout']))
     return command
+
+
+_WAIT_RETRY_INTERVAL = 2
+_WAIT_NOT_FOUND_PHRASES = ('not found', 'notfound')
+
+
+def _run_wait(binary, condition, _sleep=None):
+    '''
+    Run kubectl wait for a condition, retrying when the resource does not exist
+    yet. ``kubectl wait`` fails immediately with NotFound if the resource has
+    not been created yet (e.g. a CRD installed by a Helm chart that is still
+    starting up). This wrapper retries until the timeout is exhausted.
+    '''
+    if _sleep is None:
+        _sleep = time.sleep
+
+    wait_command = _build_wait_command(binary, condition)
+    timeout_seconds = _parse_timeout_seconds(condition.get('timeout', '30s'))
+    deadline = time.time() + timeout_seconds
+
+    while True:
+        result = __salt__['cmd.run_all'](wait_command, python_shell=False)
+        if result.get('retcode') == 0:
+            return result
+        output = (result.get('stderr') or result.get('stdout') or '').lower()
+        if any(p in output for p in _WAIT_NOT_FOUND_PHRASES) and time.time() < deadline:
+            _sleep(_WAIT_RETRY_INTERVAL)
+            continue
+        return result
+
+
+def _parse_timeout_seconds(timeout_str):
+    '''Parse a kubectl timeout string (e.g. ``60s``, ``2m``, ``1h``) into seconds.'''
+    match = re.match(r'^(\d+)(s|m|h)$', timeout_str.strip())
+    if not match:
+        return 30
+    value, unit = int(match.group(1)), match.group(2)
+    return value * {'s': 1, 'm': 60, 'h': 3600}[unit]
 
 
 def _wait_failure_comment(result, condition):
