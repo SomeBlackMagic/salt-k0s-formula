@@ -31,8 +31,9 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
         Inline YAML manifest string.
 
     wait
-        Optional list of conditions to wait for after apply. Each item is a
-        dict with the following keys:
+        Optional list of pre-conditions that must be satisfied before any
+        manifest is applied. All conditions are checked in order before
+        kubectl apply runs. Each item is a dict with the following keys:
 
         for (required)
             The condition expression passed to --for, e.g.
@@ -107,67 +108,26 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
 
     command = [binary, 'kubectl', 'apply', '-f', '-']
 
-    # When both source and content are provided with wait conditions, apply them
-    # separately so that wait runs between source and content. This allows
-    # content to depend on resources (e.g. CRDs) defined in source.
-    apply_steps = []
-    if source_content is not None and content is not None and wait:
-        apply_steps.append(source_content)
-        apply_steps.append(content)
+    parts = []
+    if source_content is not None:
+        parts.append(source_content)
+    if content is not None:
+        parts.append(content)
+    if len(parts) == 1:
+        manifest = parts[0]
     else:
-        parts = []
-        if source_content is not None:
-            parts.append(source_content)
-        if content is not None:
-            parts.append(content)
-        if len(parts) == 1:
-            apply_steps.append(parts[0])
-        else:
-            apply_steps.append('\n---\n'.join(_strip_trailing_separator(p) for p in parts))
+        manifest = '\n---\n'.join(_strip_trailing_separator(p) for p in parts)
 
     if __opts__.get('test'):
         ret['result'] = None
         comment = 'Manifests would be applied with: {0}'.format(' '.join(command))
         if wait:
             wait_commands = [' '.join(_build_wait_command(binary, c)) for c in wait]
-            comment += '\nWould wait with: {0}'.format('; '.join(wait_commands))
+            comment += '\nWould wait first: {0}'.format('; '.join(wait_commands))
         ret['comment'] = comment
         return ret
 
-    all_changes = {}
-    for step_index, manifest in enumerate(apply_steps):
-        result = __salt__['cmd.run_all'](
-            command,
-            python_shell=False,
-            stdin=manifest,
-        )
-
-        if result.get('retcode') != 0:
-            ret['result'] = False
-            ret['comment'] = _command_failure_comment(result)
-            return ret
-
-        stdout = result.get('stdout') or ''
-        step_changes = _parse_changes(stdout)
-        for key, values in step_changes.items():
-            all_changes.setdefault(key, []).extend(values)
-
-        # Run wait between steps (after source, before content)
-        if wait and step_index < len(apply_steps) - 1:
-            for condition in wait:
-                wait_command = _build_wait_command(binary, condition)
-                wait_result = __salt__['cmd.run_all'](wait_command, python_shell=False)
-                if wait_result.get('retcode') != 0:
-                    ret['result'] = False
-                    ret['comment'] = _wait_failure_comment(wait_result, condition)
-                    return ret
-
-    if all_changes:
-        ret['changes'] = {'manifests': all_changes}
-        ret['comment'] = 'Manifests were applied.'
-    else:
-        ret['comment'] = 'Manifests are already up to date.'
-
+    # Run wait conditions as pre-conditions before any apply.
     if wait:
         for condition in wait:
             wait_command = _build_wait_command(binary, condition)
@@ -176,6 +136,25 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
                 ret['result'] = False
                 ret['comment'] = _wait_failure_comment(wait_result, condition)
                 return ret
+
+    result = __salt__['cmd.run_all'](
+        command,
+        python_shell=False,
+        stdin=manifest,
+    )
+
+    if result.get('retcode') != 0:
+        ret['result'] = False
+        ret['comment'] = _command_failure_comment(result)
+        return ret
+
+    stdout = result.get('stdout') or ''
+    changes = _parse_changes(stdout)
+    if changes:
+        ret['changes'] = {'manifests': changes}
+        ret['comment'] = 'Manifests were applied.'
+    else:
+        ret['comment'] = 'Manifests are already up to date.'
 
     return ret
 
