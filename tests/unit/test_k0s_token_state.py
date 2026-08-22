@@ -90,7 +90,7 @@ def test_created_replaces_expired_token(tmp_path):
     assert result['result'] is True
     assert result['changes']['token']['old'] == 'expired'
     assert token.read_text() == 'new-token\n'
-    assert calls == [([str(binary), 'token', 'create', '--role', 'worker'], False)]
+    assert calls == [([str(binary), 'token', 'create', '--role', 'worker', '--ttl', '1h'], False)]
 
 
 def test_created_fails_when_stdout_is_none(tmp_path):

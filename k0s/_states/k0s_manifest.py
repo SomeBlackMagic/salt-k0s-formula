@@ -224,6 +224,8 @@ def _run_wait(binary, condition, _sleep=None):
         output = (result.get('stderr') or result.get('stdout') or '').lower()
         if any(p in output for p in _WAIT_NOT_FOUND_PHRASES) and time.time() < deadline:
             _sleep(_WAIT_RETRY_INTERVAL)
+            if time.time() >= deadline:
+                return result
             continue
         return result
 

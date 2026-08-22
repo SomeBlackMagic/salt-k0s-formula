@@ -218,8 +218,8 @@ def test_installed_uses_force_when_existing_unit_arguments_change(tmp_path):
         [
             str(binary),
             'install',
-            '--force',
             'worker',
+            '--force',
             '--token-file',
             str(token_file),
             '--api-server',

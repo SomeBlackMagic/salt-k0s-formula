@@ -51,7 +51,12 @@ def created(name, binary=DEFAULT_BINARY):
         ret['comment'] = _command_failure_comment(result)
         return ret
 
-    _write_file(name, result.get('stdout') or '')
+    try:
+        _write_file(name, result.get('stdout') or '')
+    except FileExistsError:
+        ret['result'] = False
+        ret['comment'] = '{0} was created by another process during state execution.'.format(name)
+        return ret
 
     ret['changes'] = {'config': {'old': 'missing', 'new': name}}
     ret['comment'] = 'k0s configuration file was created.'

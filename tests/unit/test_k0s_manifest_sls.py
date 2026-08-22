@@ -40,31 +40,46 @@ def _state_block(rendered, state_id):
     return parsed[state_id]
 
 
-# --- empty manifests ---
+def _params(rendered, state_id):
+    block = _state_block(rendered, state_id)
+    return {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
 
 
-def test_no_manifests_renders_empty(tmp_path):
+# ---------------------------------------------------------------------------
+# Empty / no manifests
+# ---------------------------------------------------------------------------
+
+
+def test_no_manifests_renders_empty():
     rendered = _render({'k0s': {}})
 
     assert yaml.safe_load(rendered) is None
 
 
-def test_empty_list_renders_empty(tmp_path):
+def test_empty_list_renders_empty():
     rendered = _render({'k0s': {'manifests': []}})
 
     assert yaml.safe_load(rendered) is None
 
 
-def test_empty_dict_renders_empty(tmp_path):
-    rendered = _render({'k0s': {'manifests': {}}})
+def test_empty_map_renders_empty():
+    rendered = _render({'k0s': {'manifests_map': {}}})
 
     assert yaml.safe_load(rendered) is None
 
 
-# --- list format ---
+def test_empty_list_and_empty_map_render_empty():
+    rendered = _render({'k0s': {'manifests': [], 'manifests_map': {}}})
+
+    assert yaml.safe_load(rendered) is None
 
 
-def test_list_single_manifest_produces_state_id_from_name(tmp_path):
+# ---------------------------------------------------------------------------
+# List format (manifests)
+# ---------------------------------------------------------------------------
+
+
+def test_list_single_manifest_produces_state_id_from_name():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'my-crds', 'source': '/srv/salt/crds.yaml'},
     ]}})
@@ -72,17 +87,15 @@ def test_list_single_manifest_produces_state_id_from_name(tmp_path):
     assert 'k0s_manifest_my-crds' in _state_ids(rendered)
 
 
-def test_list_manifest_name_appears_in_state_name_field(tmp_path):
+def test_list_manifest_name_appears_in_state_name_field():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'my-crds', 'source': '/srv/salt/crds.yaml'},
     ]}})
 
-    block = _state_block(rendered, 'k0s_manifest_my-crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['name'] == 'my-crds'
+    assert _params(rendered, 'k0s_manifest_my-crds')['name'] == 'my-crds'
 
 
-def test_list_multiple_manifests_produce_distinct_state_ids(tmp_path):
+def test_list_multiple_manifests_produce_distinct_state_ids():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
         {'name': 'connectors', 'source': '/srv/salt/connectors.yaml'},
@@ -93,17 +106,15 @@ def test_list_multiple_manifests_produce_distinct_state_ids(tmp_path):
     assert 'k0s_manifest_connectors' in ids
 
 
-def test_list_manifest_source_is_passed_through(tmp_path):
+def test_list_manifest_source_is_passed_through():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
     ]}})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['source'] == '/srv/salt/crds.yaml'
+    assert _params(rendered, 'k0s_manifest_crds')['source'] == '/srv/salt/crds.yaml'
 
 
-def test_list_manifest_wait_is_passed_through(tmp_path):
+def test_list_manifest_wait_is_passed_through():
     rendered = _render({'k0s': {'manifests': [
         {
             'name': 'crds',
@@ -112,44 +123,42 @@ def test_list_manifest_wait_is_passed_through(tmp_path):
         },
     ]}})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['wait'] == [{'for': 'condition=Established', 'resource': 'crd/foo'}]
+    assert _params(rendered, 'k0s_manifest_crds')['wait'] == [
+        {'for': 'condition=Established', 'resource': 'crd/foo'},
+    ]
 
 
-def test_list_manifest_without_source_omits_source_param(tmp_path):
+def test_list_manifest_without_source_omits_source_param():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'inline', 'content': 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: test\n'},
     ]}})
 
-    block = _state_block(rendered, 'k0s_manifest_inline')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert 'source' not in params
+    assert 'source' not in _params(rendered, 'k0s_manifest_inline')
 
 
-# --- dict format ---
+# ---------------------------------------------------------------------------
+# Map format (manifests_map)
+# ---------------------------------------------------------------------------
 
 
-def test_dict_key_becomes_state_id(tmp_path):
-    rendered = _render({'k0s': {'manifests': {
+def test_map_key_becomes_state_id():
+    rendered = _render({'k0s': {'manifests_map': {
         'my-crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
     assert 'k0s_manifest_my-crds' in _state_ids(rendered)
 
 
-def test_dict_key_becomes_name_field(tmp_path):
-    rendered = _render({'k0s': {'manifests': {
+def test_map_key_becomes_name_field():
+    rendered = _render({'k0s': {'manifests_map': {
         'my-crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
-    block = _state_block(rendered, 'k0s_manifest_my-crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['name'] == 'my-crds'
+    assert _params(rendered, 'k0s_manifest_my-crds')['name'] == 'my-crds'
 
 
-def test_dict_multiple_keys_produce_distinct_state_ids(tmp_path):
-    rendered = _render({'k0s': {'manifests': {
+def test_map_multiple_keys_produce_distinct_state_ids():
+    rendered = _render({'k0s': {'manifests_map': {
         'crds': {'source': '/srv/salt/crds.yaml'},
         'connectors': {'source': '/srv/salt/connectors.yaml'},
     }}})
@@ -159,47 +168,29 @@ def test_dict_multiple_keys_produce_distinct_state_ids(tmp_path):
     assert 'k0s_manifest_connectors' in ids
 
 
-def test_dict_source_is_passed_through(tmp_path):
-    rendered = _render({'k0s': {'manifests': {
+def test_map_source_is_passed_through():
+    rendered = _render({'k0s': {'manifests_map': {
         'crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['source'] == '/srv/salt/crds.yaml'
+    assert _params(rendered, 'k0s_manifest_crds')['source'] == '/srv/salt/crds.yaml'
 
 
-def test_dict_wait_is_passed_through(tmp_path):
-    rendered = _render({'k0s': {'manifests': {
+def test_map_wait_is_passed_through():
+    rendered = _render({'k0s': {'manifests_map': {
         'crds': {
             'source': '/srv/salt/crds.yaml',
             'wait': [{'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}],
         },
     }}})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['wait'] == [{'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}]
+    assert _params(rendered, 'k0s_manifest_crds')['wait'] == [
+        {'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'},
+    ]
 
 
-def test_dict_key_overrides_name_field_in_value(tmp_path):
-    """If the value has a 'name' field, the dict key must take precedence."""
-    rendered = _render({'k0s': {'manifests': {
-        'actual-name': {'name': 'ignored-name', 'source': '/srv/salt/crds.yaml'},
-    }}})
-
-    ids = _state_ids(rendered)
-    assert 'k0s_manifest_actual-name' in ids
-    assert 'k0s_manifest_ignored-name' not in ids
-
-    block = _state_block(rendered, 'k0s_manifest_actual-name')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['name'] == 'actual-name'
-
-
-def test_dict_content_and_source_and_wait_all_passed_through(tmp_path):
-    """Full real-world example: CRDs in source, connector in content, with wait."""
-    rendered = _render({'k0s': {'manifests': {
+def test_map_content_source_and_wait_all_passed_through():
+    rendered = _render({'k0s': {'manifests_map': {
         'external-secrets-connectors': {
             'source': '/etc/k0s/external-secrets-connectors.yaml',
             'content': 'apiVersion: external-secrets.io/v1\nkind: ClusterSecretStore\n',
@@ -209,42 +200,171 @@ def test_dict_content_and_source_and_wait_all_passed_through(tmp_path):
         },
     }}})
 
-    block = _state_block(rendered, 'k0s_manifest_external-secrets-connectors')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
+    params = _params(rendered, 'k0s_manifest_external-secrets-connectors')
     assert params['name'] == 'external-secrets-connectors'
     assert params['source'] == '/etc/k0s/external-secrets-connectors.yaml'
     assert 'ClusterSecretStore' in params['content']
     assert params['wait'][0]['resource'] == 'crd/clustersecretstores.external-secrets.io'
 
 
-# --- binary ---
+# ---------------------------------------------------------------------------
+# Combined: list + map merge
+# ---------------------------------------------------------------------------
 
 
-def test_default_binary_is_used_when_not_in_pillar(tmp_path):
+def test_map_matching_name_merges_into_list_entry():
+    """Map entry whose key matches a list entry name is merged into that entry."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'nginx', 'source': '/srv/salt/nginx.yaml'},
+        ],
+        'manifests_map': {
+            'nginx': {'wait': [{'for': 'condition=Available', 'resource': 'deployment/nginx'}]},
+        },
+    }})
+
+    params = _params(rendered, 'k0s_manifest_nginx')
+    assert params['source'] == '/srv/salt/nginx.yaml'
+    assert params['wait'] == [{'for': 'condition=Available', 'resource': 'deployment/nginx'}]
+
+
+def test_map_overrides_existing_field_on_conflict():
+    """When a key exists in both list entry and map entry, map value wins."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'app', 'source': '/srv/salt/old.yaml'},
+        ],
+        'manifests_map': {
+            'app': {'source': '/srv/salt/new.yaml'},
+        },
+    }})
+
+    assert _params(rendered, 'k0s_manifest_app')['source'] == '/srv/salt/new.yaml'
+
+
+def test_map_unmatched_key_appended_as_new_entry():
+    """Map entry whose key has no match in the list is appended as a new manifest."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'base', 'source': '/srv/salt/base.yaml'},
+        ],
+        'manifests_map': {
+            'extra': {'source': '/srv/salt/extra.yaml'},
+        },
+    }})
+
+    ids = _state_ids(rendered)
+    assert 'k0s_manifest_base' in ids
+    assert 'k0s_manifest_extra' in ids
+
+
+def test_map_appended_entry_has_correct_name_field():
+    rendered = _render({'k0s': {
+        'manifests': [],
+        'manifests_map': {
+            'extra': {'source': '/srv/salt/extra.yaml'},
+        },
+    }})
+
+    assert _params(rendered, 'k0s_manifest_extra')['name'] == 'extra'
+
+
+def test_map_does_not_mutate_unrelated_list_entries():
+    """Merging one entry must not affect other entries in the list."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'a', 'source': '/srv/salt/a.yaml'},
+            {'name': 'b', 'source': '/srv/salt/b.yaml'},
+        ],
+        'manifests_map': {
+            'a': {'wait': [{'for': 'condition=Available', 'resource': 'deployment/a'}]},
+        },
+    }})
+
+    params_b = _params(rendered, 'k0s_manifest_b')
+    assert params_b['source'] == '/srv/salt/b.yaml'
+    assert 'wait' not in params_b
+
+
+def test_mixed_some_match_some_append():
+    """Partial overlap: matched entries are merged, unmatched are appended."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
+            {'name': 'app', 'source': '/srv/salt/app.yaml'},
+        ],
+        'manifests_map': {
+            'crds': {'wait': [{'for': 'condition=Established', 'resource': 'crd/foo'}]},
+            'monitoring': {'source': '/srv/salt/monitoring.yaml'},
+        },
+    }})
+
+    ids = _state_ids(rendered)
+    assert 'k0s_manifest_crds' in ids
+    assert 'k0s_manifest_app' in ids
+    assert 'k0s_manifest_monitoring' in ids
+
+    assert _params(rendered, 'k0s_manifest_crds')['source'] == '/srv/salt/crds.yaml'
+    assert _params(rendered, 'k0s_manifest_crds')['wait'] == [
+        {'for': 'condition=Established', 'resource': 'crd/foo'},
+    ]
+    assert _params(rendered, 'k0s_manifest_monitoring')['source'] == '/srv/salt/monitoring.yaml'
+
+
+def test_map_only_no_list_produces_states():
+    """manifests_map alone (no manifests list) still produces all states."""
+    rendered = _render({'k0s': {
+        'manifests_map': {
+            'crds': {'source': '/srv/salt/crds.yaml'},
+            'app': {'source': '/srv/salt/app.yaml'},
+        },
+    }})
+
+    ids = _state_ids(rendered)
+    assert 'k0s_manifest_crds' in ids
+    assert 'k0s_manifest_app' in ids
+
+
+def test_list_only_no_map_produces_states():
+    """manifests list alone (no manifests_map) still produces all states."""
+    rendered = _render({'k0s': {
+        'manifests': [
+            {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
+        ],
+    }})
+
+    assert 'k0s_manifest_crds' in _state_ids(rendered)
+
+
+# ---------------------------------------------------------------------------
+# Binary
+# ---------------------------------------------------------------------------
+
+
+def test_default_binary_is_used_when_not_in_pillar():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
     ]}})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['binary'] == DEFAULT_BINARY
+    assert _params(rendered, 'k0s_manifest_crds')['binary'] == DEFAULT_BINARY
 
 
-def test_custom_binary_from_pillar_is_used(tmp_path):
+def test_custom_binary_from_pillar_is_used():
     rendered = _render({'k0s': {
         'binary': '/opt/k0s/bin/k0s',
         'manifests': [{'name': 'crds', 'source': '/srv/salt/crds.yaml'}],
     }})
 
-    block = _state_block(rendered, 'k0s_manifest_crds')
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    assert params['binary'] == '/opt/k0s/bin/k0s'
+    assert _params(rendered, 'k0s_manifest_crds')['binary'] == '/opt/k0s/bin/k0s'
 
 
-# --- base64 content integrity ---
+# ---------------------------------------------------------------------------
+# Base64 content integrity
 #
 # Guard against template rendering corrupting base64 values in Secrets.
 # The `indent` filter must not split or modify values on long lines.
+# ---------------------------------------------------------------------------
+
 
 _B64_TOKEN = 'c29tZXZlcnlsb25nYmFzZTY0ZW5jb2RlZHN0cmluZw=='
 
@@ -259,27 +379,33 @@ _SECRET_CONTENT = (
 
 
 def _extract_content(rendered, state_id):
-    block = _state_block(rendered, state_id)
-    params = {k: v for item in block['k0s_manifest.applied'] for k, v in item.items()}
-    return params['content']
+    return _params(rendered, state_id)['content']
 
 
 def test_content_base64_value_preserved_in_list_format():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'my-secrets', 'content': _SECRET_CONTENT},
     ]}})
-    content = _extract_content(rendered, 'k0s_manifest_my-secrets')
 
-    assert f'token: {_B64_TOKEN}' in content
+    assert f'token: {_B64_TOKEN}' in _extract_content(rendered, 'k0s_manifest_my-secrets')
 
 
-def test_content_base64_value_preserved_in_dict_format():
-    rendered = _render({'k0s': {'manifests': {
+def test_content_base64_value_preserved_in_map_format():
+    rendered = _render({'k0s': {'manifests_map': {
         'my-secrets': {'content': _SECRET_CONTENT},
     }}})
-    content = _extract_content(rendered, 'k0s_manifest_my-secrets')
 
-    assert f'token: {_B64_TOKEN}' in content
+    assert f'token: {_B64_TOKEN}' in _extract_content(rendered, 'k0s_manifest_my-secrets')
+
+
+def test_content_base64_value_preserved_after_map_merge():
+    """Base64 content added via map merge must survive rendering intact."""
+    rendered = _render({'k0s': {
+        'manifests': [{'name': 'my-secrets', 'source': '/srv/salt/secrets.yaml'}],
+        'manifests_map': {'my-secrets': {'content': _SECRET_CONTENT}},
+    }})
+
+    assert f'token: {_B64_TOKEN}' in _extract_content(rendered, 'k0s_manifest_my-secrets')
 
 
 def test_content_long_base64_value_is_not_line_wrapped():
@@ -290,9 +416,8 @@ def test_content_long_base64_value_is_not_line_wrapped():
     rendered = _render({'k0s': {'manifests': [
         {'name': 'my-secrets', 'content': content},
     ]}})
-    extracted = _extract_content(rendered, 'k0s_manifest_my-secrets')
 
-    assert f'token: {long_token}' in extracted
+    assert f'token: {long_token}' in _extract_content(rendered, 'k0s_manifest_my-secrets')
 
 
 def test_content_multiple_base64_values_all_preserved():
@@ -333,7 +458,6 @@ def test_content_internal_yaml_structure_is_parseable_by_kubectl():
     ]}})
     extracted = _extract_content(rendered, 'k0s_manifest_my-secrets')
 
-    # Parse the content as YAML exactly as kubectl would — structure must be intact
     parsed = yaml.safe_load(extracted)
     assert parsed['apiVersion'] == 'v1'
     assert parsed['kind'] == 'Secret'

@@ -110,3 +110,29 @@ k0s:
           resource: deployment/my-app
           namespace: prod
           timeout: 120s
+
+  # Alternative / override format for manifests.
+  # Keys are matched against the `name` field of entries in `manifests`.
+  # If a match is found, the values are merged (map wins on conflict).
+  # If no match is found, the entry is appended as a new manifest.
+  #
+  # Useful when a base role defines manifests via `manifests` (list) and
+  # a specific node/environment needs to override or extend individual entries.
+  manifests_map:
+    # Override an existing entry from the list above — adds wait condition.
+    nginx-deployment:
+      wait:
+        - for: condition=Available
+          resource: deployment/nginx
+          timeout: 60s
+
+    # Add a new manifest not present in the list.
+    extra-configmap:
+      content: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: extra-config
+          namespace: default
+        data:
+          key: value

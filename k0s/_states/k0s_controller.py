@@ -1,5 +1,6 @@
 import os
 import shlex
+import shutil
 
 
 __virtualname__ = 'k0s_controller'
@@ -138,13 +139,12 @@ def _normalize_extra_args(extra_args):
 
 
 def _install_command(binary, config, data_dir, single, enable_worker, no_taints, extra_args, force):
-    command = [binary, 'install']
+    command = [binary, 'install', 'controller']
 
     if force:
         command.append('--force')
 
     command.extend([
-        'controller',
         '--config',
         config,
         '--data-dir',
@@ -198,7 +198,7 @@ def _missing_prerequisites(binary, config):
 
 
 def _systemd_available():
-    return os.path.isdir('/run/systemd/system') and os.path.exists('/bin/systemctl')
+    return os.path.isdir('/run/systemd/system') and shutil.which('systemctl') is not None
 
 
 def _unit_status(unit_path, desired_args):

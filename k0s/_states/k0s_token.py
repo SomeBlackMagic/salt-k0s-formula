@@ -41,6 +41,8 @@ def created(name, ttl=24, role='worker', binary=DEFAULT_BINARY):
         return ret
 
     command = [binary, 'token', 'create', '--role', role]
+    if ttl_hours:
+        command.extend(['--ttl', '{0}h'.format(ttl_hours)])
     if __opts__.get('test'):
         ret['result'] = None
         ret['changes'] = {'token': {'old': token_status['previous'], 'new': 'created'}}

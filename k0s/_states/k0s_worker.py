@@ -1,5 +1,6 @@
 import os
 import shlex
+import shutil
 
 
 __virtualname__ = 'k0s_worker'
@@ -154,12 +155,12 @@ def _install_command(
     force,
     include_api_server=True,
 ):
-    command = [binary, 'install']
+    command = [binary, 'install', 'worker']
 
     if force:
         command.append('--force')
 
-    command.extend(['worker', '--token-file', token_file])
+    command.extend(['--token-file', token_file])
 
     if include_api_server:
         command.extend(['--api-server', api_server])
@@ -202,7 +203,7 @@ def _missing_prerequisites(binary, token_file):
 
 
 def _systemd_available():
-    return os.path.isdir('/run/systemd/system') and os.path.exists('/bin/systemctl')
+    return os.path.isdir('/run/systemd/system') and shutil.which('systemctl') is not None
 
 
 def _worker_install_supports_api_server(binary):

@@ -31,3 +31,4 @@ k0s:
     enabled: true
     running: true
   manifests: []
+  manifests_map: {}
