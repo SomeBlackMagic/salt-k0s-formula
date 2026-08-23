@@ -1,6 +1,5 @@
 import glob
 import os
-import tempfile
 
 import pytest
 import testinfra
@@ -32,6 +31,12 @@ def _get_kitchen_state():
 
 @pytest.fixture(scope='session')
 def host(tmp_path_factory):
+    # CI mode: connect directly to a named Docker container.
+    docker_container = os.environ.get('KITCHEN_DOCKER_CONTAINER')
+    if docker_container:
+        return testinfra.get_host(f'docker://{docker_container}')
+
+    # Local mode: connect via SSH to a Kitchen-managed container.
     state = _get_kitchen_state()
     username = state.get('username', 'kitchen')
     hostname = state.get('hostname', 'localhost')

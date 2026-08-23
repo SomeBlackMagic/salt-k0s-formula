@@ -1,0 +1,140 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  # ─── Unit tests ────────────────────────────────────────────────────────────
+  unit:
+    name: Unit Tests
+    runs-on: ubuntu-22.04
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: pytest tests/unit/ -v
+
+  # ─── Integration tests ─────────────────────────────────────────────────────
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-22.04
+    needs: unit
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # Cache the built image to speed up subsequent runs.
+      # The cache key includes the Dockerfile hash so a new image is built
+      # whenever Dockerfile.kitchen changes.
+      - name: Cache Docker image
+        id: cache-image
+        uses: actions/cache@v4
+        with:
+          path: /tmp/salt-kitchen.tar
+          key: docker-${{ runner.os }}-${{ hashFiles('Dockerfile.kitchen') }}
+
+      - name: Load cached image
+        if: steps.cache-image.outputs.cache-hit == 'true'
+        run: docker load -i /tmp/salt-kitchen.tar
+
+      - name: Build test container image
+        if: steps.cache-image.outputs.cache-hit != 'true'
+        run: docker build -t salt-kitchen:ubuntu-22.04 -f Dockerfile.kitchen .
+
+      - name: Save image to cache
+        if: steps.cache-image.outputs.cache-hit != 'true'
+        run: docker save salt-kitchen:ubuntu-22.04 -o /tmp/salt-kitchen.tar
+
+      # Run a privileged container so that systemd and k0s can manage cgroups.
+      - name: Start test container
+        run: |
+          docker run -d \
+            --name kitchen-test \
+            --privileged \
+            --cgroupns=host \
+            -v /sys/fs/cgroup:/sys/fs/cgroup:rw \
+            salt-kitchen:ubuntu-22.04 \
+            /sbin/init
+
+      # Wait until systemd finishes its boot sequence. "degraded" is expected
+      # because some units do not work inside a container.
+      - name: Wait for systemd
+        run: |
+          for i in $(seq 1 30); do
+            status=$(docker exec kitchen-test systemctl is-system-running 2>/dev/null || true)
+            case "$status" in
+              running|degraded)
+                echo "systemd ready: $status"
+                exit 0
+                ;;
+            esac
+            echo "Waiting for systemd ($i/30): $status"
+            sleep 2
+          done
+          echo "systemd did not become ready in time" >&2
+          docker exec kitchen-test systemctl status --no-pager || true
+          exit 1
+
+      # Mirror the layout that the kitchen-salt provisioner creates so that the
+      # existing test suite can run unchanged.
+      #
+      # /tmp/kitchen/srv/salt/
+      #   k0s/          ← formula files
+      #   _states/      ← custom state modules (saltutil.sync_states reads here)
+      # /tmp/kitchen/srv/pillar/
+      #   top.sls
+      #   base.sls
+      - name: Provision formula into container
+        run: |
+          docker exec kitchen-test mkdir -p \
+            /tmp/kitchen/srv/salt \
+            /tmp/kitchen/srv/pillar
+
+          docker cp k0s kitchen-test:/tmp/kitchen/srv/salt/k0s
+
+          docker exec kitchen-test cp -r \
+            /tmp/kitchen/srv/salt/k0s/_states \
+            /tmp/kitchen/srv/salt/_states
+
+          docker cp pillars/. kitchen-test:/tmp/kitchen/srv/pillar/
+
+      - name: Run integration tests
+        run: |
+          mkdir -p reports
+          pytest tests/integration/default/ -v \
+            --html=reports/integration-report.html
+        env:
+          # Instructs conftest.py to use docker:// instead of SSH.
+          KITCHEN_DOCKER_CONTAINER: kitchen-test
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-report
+          path: reports/
+
+      - name: Stop and remove container
+        if: always()
+        run: |
+          docker stop kitchen-test || true
+          docker rm kitchen-test || true
