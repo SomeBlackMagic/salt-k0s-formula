@@ -51,12 +51,12 @@ k0s:
 
 ## Required Values by Role
 
-| Parameter | `single` | `controller` | `worker` |
-|---|---:|---:|---:|
-| `k0s.role` | yes | yes | yes |
-| `k0s.version` | recommended | recommended | recommended |
-| `k0s.worker.join_token` | no | no | yes |
-| `k0s.worker.api_address` | no | no | yes |
+| Parameter                |    `single` | `controller` |    `worker` |
+|--------------------------|------------:|-------------:|------------:|
+| `k0s.role`               |         yes |          yes |         yes |
+| `k0s.version`            | recommended |  recommended | recommended |
+| `k0s.worker.join_token`  |          no |           no |         yes |
+| `k0s.worker.api_address` |          no |           no |         yes |
 
 If `k0s.role` is not set, the formula uses `single`.
 
@@ -189,3 +189,191 @@ k0s:
 - `running: true` starts the service.
 - `running: false` stops the service.
 - `enabled: false` disables the unit at boot.
+
+## `k0s.manifests` and `k0s.manifests_map`
+
+Kubernetes manifests to apply via `k0s kubectl apply` after the cluster
+becomes operational.
+
+### Formats
+
+**`manifests`** — ordered list:
+
+```yaml
+k0s:
+  manifests:
+    - name: my-crds
+      source: /srv/salt/files/crds.yaml
+```
+
+**`manifests_map`** — dictionary keyed by `name`. Useful for overriding
+individual entries defined in a base role:
+
+```yaml
+k0s:
+  manifests_map:
+    my-crds:
+      source: /srv/salt/files/crds.yaml
+```
+
+Both formats can be used together. When a `manifests_map` key matches the
+`name` of a `manifests` entry, the two are **merged** (map values win on
+conflict). Unmatched map keys are appended as new entries.
+
+### Entry fields
+
+| Field           | Required                    | Description |
+|-----------------|-----------------------------|-------------|
+| `name`          | yes (in `manifests`)        | Salt state identifier |
+| `source`        | one of `source`/`content`   | Path to a manifest file on the minion |
+| `content`       | one of `source`/`content`   | Inline YAML manifest string |
+| `wait`          | no                          | Pre-conditions checked before apply (see below) |
+| `template`      | no                          | `true` — render as Jinja2 before applying |
+| `template_vars` | no                          | Extra variables available inside the template |
+
+`source` and `content` may both be set; their contents are concatenated
+before applying.
+
+### Pre-conditions (`wait`)
+
+`wait` is a list of conditions checked via `kubectl wait` **before**
+`kubectl apply`. If any condition fails, the manifest is not applied.
+
+```yaml
+k0s:
+  manifests:
+    - name: my-app
+      source: /srv/salt/files/app.yaml
+      wait:
+        - for: condition=Established
+          resource: crd/myresources.example.com
+          timeout: 60s
+        - for: condition=Available
+          resource: deployment/dependency
+          namespace: infra
+          timeout: 120s
+```
+
+| Key         | Required | Description |
+|-------------|----------|-------------|
+| `for`       | yes      | Condition passed to `--for`, e.g. `condition=Established` |
+| `resource`  | yes      | Resource reference, e.g. `crd/foo.example.com` |
+| `timeout`   | no       | Duration passed to `--timeout`, e.g. `60s`, `2m` (kubectl default: 30s) |
+| `namespace` | no       | Namespace passed to `-n` (required for namespace-scoped resources) |
+
+If the resource does not exist yet (`NotFound`), `wait` retries automatically
+until `timeout` is exceeded.
+
+### Jinja2 templates
+
+Set `template: true` to render `content` and `source` file contents as
+Jinja2 before applying.
+
+Variables available inside the template:
+
+| Variable      | Contains |
+|---------------|----------|
+| `pillar`      | Salt pillar data (`__pillar__`) |
+| `grains`      | Salt grains (`__grains__`) |
+| `opts`        | Salt opts (`__opts__`) |
+| `salt`        | Salt execution modules (`__salt__`) |
+| *(any name)*  | Keys from `template_vars` |
+
+```yaml
+k0s:
+  manifests:
+    - name: app-config
+      template: true
+      template_vars:
+        environment: production
+        replicas: 3
+      content: |
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: my-app
+          namespace: {{ environment }}
+        spec:
+          replicas: {{ replicas }}
+          selector:
+            matchLabels:
+              app: my-app
+          template:
+            metadata:
+              labels:
+                app: my-app
+            spec:
+              containers:
+                - name: my-app
+                  image: my-app:{{ pillar['my_app']['version'] }}
+```
+
+### Examples
+
+**Source file only:**
+
+```yaml
+k0s:
+  manifests:
+    - name: nginx
+      source: /srv/salt/k0s/files/nginx.yaml
+```
+
+**Inline content only:**
+
+```yaml
+k0s:
+  manifests:
+    - name: coredns-config
+      content: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: coredns-custom
+          namespace: kube-system
+        data:
+          log.override: |
+            log
+```
+
+**Source file and inline content (concatenated):**
+
+```yaml
+k0s:
+  manifests:
+    - name: app-with-quota
+      source: /srv/salt/k0s/files/namespace.yaml
+      content: |
+        apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: default-quota
+          namespace: my-app
+        spec:
+          hard:
+            pods: "10"
+```
+
+**CRDs with a wait condition before installing the operator:**
+
+```yaml
+k0s:
+  manifests:
+    - name: external-secrets-crds
+      source: /srv/salt/k0s/files/external-secrets-crds.yaml
+
+    - name: external-secrets-operator
+      source: /srv/salt/k0s/files/external-secrets.yaml
+      wait:
+        - for: condition=Established
+          resource: crd/clustersecretstores.external-secrets.io
+          timeout: 60s
+
+  manifests_map:
+    # Override the wait condition for a specific environment
+    external-secrets-crds:
+      wait:
+        - for: condition=Established
+          resource: crd/externalsecrets.external-secrets.io
+          timeout: 90s
+```
