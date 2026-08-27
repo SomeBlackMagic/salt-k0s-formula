@@ -4,12 +4,49 @@ on:
   push:
     branches: [master]
   pull_request:
+    branches: [master]
 
 jobs:
+  # ─── Lint ──────────────────────────────────────────────────────────────────
+  lint:
+    name: Lint (${{ matrix.lint-tool }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        lint-tool:
+          - yamllint
+          - salt-lint
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install yamllint
+        if: matrix.lint-tool == 'yamllint'
+        run: pip install 'yamllint>=1.26.0'
+
+      - name: Run yamllint
+        if: matrix.lint-tool == 'yamllint'
+        run: yamllint -s .
+
+      - name: Install salt-lint
+        if: matrix.lint-tool == 'salt-lint'
+        run: pip install salt-lint
+
+      - name: Run salt-lint
+        if: matrix.lint-tool == 'salt-lint'
+        run: |
+          git ls-files -- '*.sls' | xargs --no-run-if-empty salt-lint
+
   # ─── Unit tests ────────────────────────────────────────────────────────────
   unit:
     name: Unit Tests
     runs-on: ubuntu-22.04
+    needs: lint
 
     steps:
       - uses: actions/checkout@v4

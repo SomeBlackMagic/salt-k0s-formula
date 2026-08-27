@@ -3,3 +3,5 @@ pytest-testinfra
 pytest-html
 pyyaml
 jinja2
+yamllint>=1.26.0
+salt-lint

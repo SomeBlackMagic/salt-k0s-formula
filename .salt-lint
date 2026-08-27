@@ -1,0 +1,8 @@
+# -*- coding: utf-8 -*-
+# vim: ft=yaml
+---
+# https://github.com/warpnet/salt-lint
+exclude_paths:
+  - .kitchen/
+  - .git/
+  - .venv/
