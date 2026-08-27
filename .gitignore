@@ -1,6 +1,25 @@
-.idea
-.kitchen
-.venv
+# IDE
+.idea/
+
+# Test Kitchen runtime state
+.kitchen/
+
+# Python
+.venv/
 __pycache__/
 *.py[cod]
+*.pyo
+.pytest_cache/
+
+# Test reports
 reports/
+
+# Ruby / Bundler
+vendor/bundle/
+.bundle/
+
+# Symlink created by make prepare_extmods / integration-tests
+_states
+
+# OS
+.DS_Store
