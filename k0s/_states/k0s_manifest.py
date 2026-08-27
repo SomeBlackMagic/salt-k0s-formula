@@ -2,6 +2,8 @@ import os
 import re
 import time
 
+import jinja2
+
 
 __virtualname__ = 'k0s_manifest'
 
@@ -12,7 +14,8 @@ def __virtual__():
     return __virtualname__
 
 
-def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
+def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None,
+            template=False, template_vars=None):
     '''
     Apply Kubernetes manifests via k0s kubectl apply.
 
@@ -50,6 +53,23 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
 
         namespace (optional)
             Namespace passed to -n. Required for namespace-scoped resources.
+
+    template
+        When ``True``, render ``content`` and ``source`` file contents as
+        Jinja2 templates before applying. The following variables are
+        available inside the template:
+
+        - ``pillar`` — the Salt pillar data (``__pillar__``);
+        - ``grains`` — the Salt grains (``__grains__``);
+        - ``opts`` — the Salt opts (``__opts__``);
+        - ``salt`` — the Salt execution module dunder (``__salt__``).
+
+        Any keys provided via ``template_vars`` are also available as
+        top-level variables. Defaults to ``False``.
+
+    template_vars
+        Optional dict of additional variables made available inside the
+        Jinja2 template when ``template=True``.
 
     Example pillar::
 
@@ -106,6 +126,25 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None):
                 return ret
         else:
             source_content = source_result['content']
+
+    if template:
+        render_error = None
+        if source_content is not None:
+            render_result = _render_template(source_content, template_vars)
+            if render_result['result']:
+                source_content = render_result['content']
+            else:
+                render_error = render_result['comment']
+        if render_error is None and content is not None:
+            render_result = _render_template(content, template_vars)
+            if render_result['result']:
+                content = render_result['content']
+            else:
+                render_error = render_result['comment']
+        if render_error is not None:
+            ret['result'] = False
+            ret['comment'] = render_error
+            return ret
 
     command = [binary, 'kubectl', 'apply', '-f', '-']
 
@@ -302,3 +341,29 @@ def _command_failure_comment(result):
         result.get('retcode'),
         output.strip(),
     )
+
+
+def _render_template(text, template_vars=None):
+    '''Render *text* as a Jinja2 template with Salt dunders as context variables.
+
+    Returns a dict with ``result`` (bool) and either ``content`` (str) on
+    success or ``comment`` (str) on failure.
+    '''
+    ctx = {
+        'pillar': globals().get('__pillar__', {}),
+        'grains': globals().get('__grains__', {}),
+        'opts': globals().get('__opts__', {}),
+        'salt': globals().get('__salt__', {}),
+    }
+    if template_vars:
+        ctx.update(template_vars)
+
+    try:
+        env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+        rendered = env.from_string(text).render(**ctx)
+        return {'result': True, 'content': rendered}
+    except jinja2.TemplateError as exc:
+        return {
+            'result': False,
+            'comment': 'Failed to render manifest template: {0}'.format(exc),
+        }

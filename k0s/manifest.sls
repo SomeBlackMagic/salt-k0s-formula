@@ -41,4 +41,10 @@ k0s_manifest_{{ manifest.name | default('manifest_' + loop.index | string) }}:
     {%- if manifest.wait is defined %}
     - wait: {{ manifest.wait | tojson }}
     {%- endif %}
+    {%- if manifest.template is defined %}
+    - template: {{ manifest.template | tojson }}
+    {%- endif %}
+    {%- if manifest.template_vars is defined %}
+    - template_vars: {{ manifest.template_vars | tojson }}
+    {%- endif %}
 {%- endfor %}

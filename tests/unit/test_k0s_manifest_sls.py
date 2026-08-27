@@ -464,3 +464,73 @@ def test_content_internal_yaml_structure_is_parseable_by_kubectl():
     assert parsed['metadata']['name'] == 'my-secret'
     assert parsed['metadata']['namespace'] == 'production'
     assert parsed['data']['token'] == b64_value
+
+
+# ---------------------------------------------------------------------------
+# Template parameter passthrough
+# ---------------------------------------------------------------------------
+
+
+def test_list_manifest_template_true_is_passed_through():
+    """template: true from list entry must appear in the rendered state."""
+    rendered = _render({'k0s': {'manifests': [
+        {'name': 'my-cm', 'content': 'apiVersion: v1\nkind: ConfigMap\n', 'template': True},
+    ]}})
+
+    assert _params(rendered, 'k0s_manifest_my-cm')['template'] is True
+
+
+def test_list_manifest_without_template_omits_template_param():
+    """When template is not set in a list entry, it must be absent from the state."""
+    rendered = _render({'k0s': {'manifests': [
+        {'name': 'my-cm', 'content': 'apiVersion: v1\nkind: ConfigMap\n'},
+    ]}})
+
+    assert 'template' not in _params(rendered, 'k0s_manifest_my-cm')
+
+
+def test_list_manifest_template_vars_are_passed_through():
+    """template_vars from a list entry must be passed to the rendered state."""
+    rendered = _render({'k0s': {'manifests': [
+        {
+            'name': 'my-cm',
+            'content': 'apiVersion: v1\nkind: ConfigMap\n',
+            'template': True,
+            'template_vars': {'env': 'production'},
+        },
+    ]}})
+
+    params = _params(rendered, 'k0s_manifest_my-cm')
+    assert params['template_vars'] == {'env': 'production'}
+
+
+def test_map_manifest_template_true_is_passed_through():
+    """template: true from a map entry must appear in the rendered state."""
+    rendered = _render({'k0s': {'manifests_map': {
+        'my-cm': {'content': 'apiVersion: v1\nkind: ConfigMap\n', 'template': True},
+    }}})
+
+    assert _params(rendered, 'k0s_manifest_my-cm')['template'] is True
+
+
+def test_map_manifest_without_template_omits_template_param():
+    """When template is not set in a map entry, it must be absent from the state."""
+    rendered = _render({'k0s': {'manifests_map': {
+        'my-cm': {'content': 'apiVersion: v1\nkind: ConfigMap\n'},
+    }}})
+
+    assert 'template' not in _params(rendered, 'k0s_manifest_my-cm')
+
+
+def test_map_manifest_template_vars_are_passed_through():
+    """template_vars from a map entry must be passed to the rendered state."""
+    rendered = _render({'k0s': {'manifests_map': {
+        'my-cm': {
+            'content': 'apiVersion: v1\nkind: ConfigMap\n',
+            'template': True,
+            'template_vars': {'zone': 'eu-west'},
+        },
+    }}})
+
+    params = _params(rendered, 'k0s_manifest_my-cm')
+    assert params['template_vars'] == {'zone': 'eu-west'}

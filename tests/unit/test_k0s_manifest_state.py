@@ -806,6 +806,152 @@ def test_applied_with_source_content_and_wait_runs_wait_then_single_apply(tmp_pa
     assert NGINX_DEPLOYMENT in calls[1]['stdin']
     assert SECRET_STORE_MANIFEST in calls[1]['stdin']
 
+
+# --- template rendering ---
+
+
+def test_applied_with_template_false_does_not_render_content(tmp_path):
+    """When template=False (default), Jinja2 tags in content are passed as-is."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__pillar__ = {'key': 'value'}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  key: {{ pillar["key"] }}\n'
+    result = state.applied('test', binary=str(binary), content=content, template=False)
+
+    assert result['result'] is True
+    assert '{{ pillar["key"] }}' in calls[0]['stdin']
+
+
+def test_applied_with_template_true_renders_content_with_pillar(tmp_path):
+    """When template=True, Jinja2 tags in content are rendered using __pillar__."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__pillar__ = {'db': {'host': 'postgres.svc'}}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  host: {{ pillar["db"]["host"] }}\n'
+    result = state.applied('test', binary=str(binary), content=content, template=True)
+
+    assert result['result'] is True
+    assert 'postgres.svc' in calls[0]['stdin']
+    assert '{{' not in calls[0]['stdin']
+
+
+def test_applied_with_template_true_renders_content_with_grains(tmp_path):
+    """When template=True, Jinja2 tags in content can access __grains__."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__grains__ = {'id': 'node-01'}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  node: {{ grains["id"] }}\n'
+    result = state.applied('test', binary=str(binary), content=content, template=True)
+
+    assert result['result'] is True
+    assert 'node-01' in calls[0]['stdin']
+
+
+def test_applied_with_template_true_renders_source_with_pillar(tmp_path):
+    """When template=True, source file contents are rendered using __pillar__."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__pillar__ = {'app': {'replicas': '3'}}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    source = _create_source(
+        tmp_path,
+        'apiVersion: apps/v1\nkind: Deployment\nspec:\n  replicas: {{ pillar["app"]["replicas"] }}\n',
+    )
+    result = state.applied('test', binary=str(binary), source=str(source), template=True)
+
+    assert result['result'] is True
+    assert 'replicas: 3' in calls[0]['stdin']
+    assert '{{' not in calls[0]['stdin']
+
+
+def test_applied_with_template_true_and_template_vars(tmp_path):
+    """template_vars are available as top-level variables in the template."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__pillar__ = {}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'stdin': stdin})
+        return {'retcode': 0, 'stdout': '', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  env: {{ environment }}\n'
+    result = state.applied(
+        'test',
+        binary=str(binary),
+        content=content,
+        template=True,
+        template_vars={'environment': 'production'},
+    )
+
+    assert result['result'] is True
+    assert 'env: production' in calls[0]['stdin']
+
+
+def test_applied_with_template_true_reports_render_error(tmp_path):
+    """When template rendering fails, result=False is returned with a clear message."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__pillar__ = {}
+    state.__salt__ = {}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  key: {{ undefined_variable }}\n'
+    result = state.applied('test', binary=str(binary), content=content, template=True)
+
+    assert result['result'] is False
+    assert 'template' in result['comment'].lower()
+
+
+def test_applied_with_template_true_in_test_mode_does_not_apply(tmp_path):
+    """In test mode with template=True, content is rendered but apply does not run."""
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+    state.__pillar__ = {'zone': 'eu-west'}
+    calls = []
+    state.__salt__ = {'cmd.run_all': calls.append}
+
+    content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  zone: {{ pillar["zone"] }}\n'
+    result = state.applied('test', binary=str(binary), content=content, template=True)
+
+    assert result['result'] is None
+    assert calls == []
+    assert 'would be applied' in result['comment']
+
+
 # --- wait retry on NotFound ---
 
 
