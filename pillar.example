@@ -118,7 +118,7 @@ k0s:
   #
   # Useful when a base role defines manifests via `manifests` (list) and
   # a specific node/environment needs to override or extend individual entries.
-  manifests_map:
+  manifests_extra:
     # Override an existing entry from the list above — adds wait condition.
     nginx-deployment:
       wait:

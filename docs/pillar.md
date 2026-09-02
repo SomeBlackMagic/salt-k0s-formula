@@ -190,7 +190,7 @@ k0s:
 - `running: false` stops the service.
 - `enabled: false` disables the unit at boot.
 
-## `k0s.manifests` and `k0s.manifests_map`
+## `k0s.manifests` and `k0s.manifests_extra`
 
 Kubernetes manifests to apply via `k0s kubectl apply` after the cluster
 becomes operational.
@@ -206,17 +206,17 @@ k0s:
       source: /srv/salt/files/crds.yaml
 ```
 
-**`manifests_map`** — dictionary keyed by `name`. Useful for overriding
+**`manifests_extra`** — dictionary keyed by `name`. Useful for overriding
 individual entries defined in a base role:
 
 ```yaml
 k0s:
-  manifests_map:
+  manifests_extra:
     my-crds:
       source: /srv/salt/files/crds.yaml
 ```
 
-Both formats can be used together. When a `manifests_map` key matches the
+Both formats can be used together. When a `manifests_extra` key matches the
 `name` of a `manifests` entry, the two are **merged** (map values win on
 conflict). Unmatched map keys are appended as new entries.
 
@@ -308,6 +308,60 @@ k0s:
                   image: my-app:{{ pillar['my_app']['version'] }}
 ```
 
+#### Accessing list elements
+
+Use `[0]` to access the first element of a list, `[1]` for the second, and
+so on. Negative indices count from the end: `[-1]` is the last element.
+
+```yaml
+k0s:
+  manifests:
+    - name: cluster-issuer
+      template: true
+      content: |
+        apiVersion: cert-manager.io/v1
+        kind: ClusterIssuer
+        metadata:
+          name: letsencrypt
+        spec:
+          acme:
+            # First element of the list: pillar['k0s']['config']['spec']['api']['sans'][0]
+            server: https://acme-v02.api.letsencrypt.org/directory
+            email: {{ pillar['cert_manager']['acme_emails'][0] }}
+            privateKeySecretRef:
+              name: letsencrypt-account-key
+            solvers:
+              - dns01:
+                  # Last element of the sans list
+                  domain: {{ pillar['k0s']['config']['spec']['api']['sans'][-1] }}
+```
+
+`template_vars` can also pass a list; index it the same way:
+
+```yaml
+k0s:
+  manifests:
+    - name: primary-node-config
+      template: true
+      template_vars:
+        nodes:
+          - name: node-01
+            ip: 10.0.0.1
+          - name: node-02
+            ip: 10.0.0.2
+      content: |
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: primary-node
+        data:
+          # First element: nodes[0]
+          primary_name: {{ nodes[0]['name'] }}
+          primary_ip:   {{ nodes[0]['ip'] }}
+          # Last element: nodes[-1]
+          last_name:    {{ nodes[-1]['name'] }}
+```
+
 ### Examples
 
 **Source file only:**
@@ -369,7 +423,7 @@ k0s:
           resource: crd/clustersecretstores.external-secrets.io
           timeout: 60s
 
-  manifests_map:
+  manifests_extra:
     # Override the wait condition for a specific environment
     external-secrets-crds:
       wait:

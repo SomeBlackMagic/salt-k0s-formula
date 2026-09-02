@@ -63,13 +63,13 @@ def test_empty_list_renders_empty():
 
 
 def test_empty_map_renders_empty():
-    rendered = _render({'k0s': {'manifests_map': {}}})
+    rendered = _render({'k0s': {'manifests_extra': {}}})
 
     assert yaml.safe_load(rendered) is None
 
 
 def test_empty_list_and_empty_map_render_empty():
-    rendered = _render({'k0s': {'manifests': [], 'manifests_map': {}}})
+    rendered = _render({'k0s': {'manifests': [], 'manifests_extra': {}}})
 
     assert yaml.safe_load(rendered) is None
 
@@ -137,12 +137,12 @@ def test_list_manifest_without_source_omits_source_param():
 
 
 # ---------------------------------------------------------------------------
-# Map format (manifests_map)
+# Map format (manifests_extra)
 # ---------------------------------------------------------------------------
 
 
 def test_map_key_becomes_state_id():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
@@ -150,7 +150,7 @@ def test_map_key_becomes_state_id():
 
 
 def test_map_key_becomes_name_field():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
@@ -158,7 +158,7 @@ def test_map_key_becomes_name_field():
 
 
 def test_map_multiple_keys_produce_distinct_state_ids():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'crds': {'source': '/srv/salt/crds.yaml'},
         'connectors': {'source': '/srv/salt/connectors.yaml'},
     }}})
@@ -169,7 +169,7 @@ def test_map_multiple_keys_produce_distinct_state_ids():
 
 
 def test_map_source_is_passed_through():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'crds': {'source': '/srv/salt/crds.yaml'},
     }}})
 
@@ -177,7 +177,7 @@ def test_map_source_is_passed_through():
 
 
 def test_map_wait_is_passed_through():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'crds': {
             'source': '/srv/salt/crds.yaml',
             'wait': [{'for': 'condition=Established', 'resource': 'crd/foo', 'timeout': '60s'}],
@@ -190,7 +190,7 @@ def test_map_wait_is_passed_through():
 
 
 def test_map_content_source_and_wait_all_passed_through():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'external-secrets-connectors': {
             'source': '/etc/k0s/external-secrets-connectors.yaml',
             'content': 'apiVersion: external-secrets.io/v1\nkind: ClusterSecretStore\n',
@@ -218,7 +218,7 @@ def test_map_matching_name_merges_into_list_entry():
         'manifests': [
             {'name': 'nginx', 'source': '/srv/salt/nginx.yaml'},
         ],
-        'manifests_map': {
+        'manifests_extra': {
             'nginx': {'wait': [{'for': 'condition=Available', 'resource': 'deployment/nginx'}]},
         },
     }})
@@ -234,7 +234,7 @@ def test_map_overrides_existing_field_on_conflict():
         'manifests': [
             {'name': 'app', 'source': '/srv/salt/old.yaml'},
         ],
-        'manifests_map': {
+        'manifests_extra': {
             'app': {'source': '/srv/salt/new.yaml'},
         },
     }})
@@ -248,7 +248,7 @@ def test_map_unmatched_key_appended_as_new_entry():
         'manifests': [
             {'name': 'base', 'source': '/srv/salt/base.yaml'},
         ],
-        'manifests_map': {
+        'manifests_extra': {
             'extra': {'source': '/srv/salt/extra.yaml'},
         },
     }})
@@ -261,7 +261,7 @@ def test_map_unmatched_key_appended_as_new_entry():
 def test_map_appended_entry_has_correct_name_field():
     rendered = _render({'k0s': {
         'manifests': [],
-        'manifests_map': {
+        'manifests_extra': {
             'extra': {'source': '/srv/salt/extra.yaml'},
         },
     }})
@@ -276,7 +276,7 @@ def test_map_does_not_mutate_unrelated_list_entries():
             {'name': 'a', 'source': '/srv/salt/a.yaml'},
             {'name': 'b', 'source': '/srv/salt/b.yaml'},
         ],
-        'manifests_map': {
+        'manifests_extra': {
             'a': {'wait': [{'for': 'condition=Available', 'resource': 'deployment/a'}]},
         },
     }})
@@ -293,7 +293,7 @@ def test_mixed_some_match_some_append():
             {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
             {'name': 'app', 'source': '/srv/salt/app.yaml'},
         ],
-        'manifests_map': {
+        'manifests_extra': {
             'crds': {'wait': [{'for': 'condition=Established', 'resource': 'crd/foo'}]},
             'monitoring': {'source': '/srv/salt/monitoring.yaml'},
         },
@@ -312,9 +312,9 @@ def test_mixed_some_match_some_append():
 
 
 def test_map_only_no_list_produces_states():
-    """manifests_map alone (no manifests list) still produces all states."""
+    """manifests_extra alone (no manifests list) still produces all states."""
     rendered = _render({'k0s': {
-        'manifests_map': {
+        'manifests_extra': {
             'crds': {'source': '/srv/salt/crds.yaml'},
             'app': {'source': '/srv/salt/app.yaml'},
         },
@@ -326,7 +326,7 @@ def test_map_only_no_list_produces_states():
 
 
 def test_list_only_no_map_produces_states():
-    """manifests list alone (no manifests_map) still produces all states."""
+    """manifests list alone (no manifests_extra) still produces all states."""
     rendered = _render({'k0s': {
         'manifests': [
             {'name': 'crds', 'source': '/srv/salt/crds.yaml'},
@@ -391,7 +391,7 @@ def test_content_base64_value_preserved_in_list_format():
 
 
 def test_content_base64_value_preserved_in_map_format():
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-secrets': {'content': _SECRET_CONTENT},
     }}})
 
@@ -402,7 +402,7 @@ def test_content_base64_value_preserved_after_map_merge():
     """Base64 content added via map merge must survive rendering intact."""
     rendered = _render({'k0s': {
         'manifests': [{'name': 'my-secrets', 'source': '/srv/salt/secrets.yaml'}],
-        'manifests_map': {'my-secrets': {'content': _SECRET_CONTENT}},
+        'manifests_extra': {'my-secrets': {'content': _SECRET_CONTENT}},
     }})
 
     assert f'token: {_B64_TOKEN}' in _extract_content(rendered, 'k0s_manifest_my-secrets')
@@ -506,7 +506,7 @@ def test_list_manifest_template_vars_are_passed_through():
 
 def test_map_manifest_template_true_is_passed_through():
     """template: true from a map entry must appear in the rendered state."""
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-cm': {'content': 'apiVersion: v1\nkind: ConfigMap\n', 'template': True},
     }}})
 
@@ -515,7 +515,7 @@ def test_map_manifest_template_true_is_passed_through():
 
 def test_map_manifest_without_template_omits_template_param():
     """When template is not set in a map entry, it must be absent from the state."""
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-cm': {'content': 'apiVersion: v1\nkind: ConfigMap\n'},
     }}})
 
@@ -524,7 +524,7 @@ def test_map_manifest_without_template_omits_template_param():
 
 def test_map_manifest_template_vars_are_passed_through():
     """template_vars from a map entry must be passed to the rendered state."""
-    rendered = _render({'k0s': {'manifests_map': {
+    rendered = _render({'k0s': {'manifests_extra': {
         'my-cm': {
             'content': 'apiVersion: v1\nkind: ConfigMap\n',
             'template': True,

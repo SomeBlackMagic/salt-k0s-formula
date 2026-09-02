@@ -1,5 +1,5 @@
 {%- set _raw_list = salt['pillar.get']('k0s:manifests', []) %}
-{%- set _raw_map  = salt['pillar.get']('k0s:manifests_map', {}) %}
+{%- set _raw_map  = salt['pillar.get']('k0s:manifests_extra', {}) %}
 {%- set binary = salt['pillar.get']('k0s:binary', '/usr/local/bin/k0s') %}
 
 {# Build base list — copy each entry so we can mutate safely #}
