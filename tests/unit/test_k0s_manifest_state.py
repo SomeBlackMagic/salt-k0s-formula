@@ -152,38 +152,167 @@ def test_applied_uses_content_when_source_file_is_missing(tmp_path):
     assert calls[0]['stdin'] == NGINX_DEPLOYMENT
 
 
-# --- test mode ---
+# --- test mode (dry-run=server) ---
 
 
-def test_applied_reports_pending_change_in_test_mode_with_content(tmp_path):
+def test_applied_runs_dry_run_server_in_test_mode_with_content(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
     state.__opts__ = {'test': True}
     calls = []
-    state.__salt__ = {'cmd.run_all': calls.append}
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx created (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
 
     result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
 
     assert result['result'] is None
-    assert result['changes'] == {}
-    assert 'would be applied' in result['comment']
-    assert calls == []
+    assert 'deployment.apps/nginx' in result['changes']['manifests']['created']
+    assert 'Dry-run validation passed' in result['comment']
+    assert len(calls) == 1
+    assert '--dry-run=server' in calls[0]['command']
+    assert calls[0]['stdin'] == NGINX_DEPLOYMENT
 
 
-def test_applied_reports_pending_change_in_test_mode_with_source(tmp_path):
+def test_applied_runs_dry_run_server_in_test_mode_with_source(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
     source = _create_source(tmp_path)
     state.__opts__ = {'test': True}
     calls = []
-    state.__salt__ = {'cmd.run_all': calls.append}
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx configured (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
 
     result = state.applied('test', binary=str(binary), source=str(source))
 
     assert result['result'] is None
+    assert 'deployment.apps/nginx' in result['changes']['manifests']['configured']
+    assert len(calls) == 1
+    assert '--dry-run=server' in calls[0]['command']
+
+
+def test_applied_dry_run_reports_no_changes_when_unchanged(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx unchanged (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
+
+    assert result['result'] is True
     assert result['changes'] == {}
-    assert 'would be applied' in result['comment']
-    assert calls == []
+    assert 'up to date' in result['comment']
+
+
+def test_applied_dry_run_fails_on_invalid_manifest(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 1, 'stdout': '', 'stderr': 'error: unable to decode "STDIN": invalid yaml'}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content='not: valid: yaml: {{')
+
+    assert result['result'] is False
+    assert 'Dry-run validation failed' in result['comment']
+    assert 'invalid yaml' in result['comment']
+
+
+def test_applied_dry_run_reports_mixed_changes(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+
+    def run_all(command, python_shell, stdin):
+        return {
+            'retcode': 0,
+            'stdout': 'deployment.apps/nginx created (server dry run)\nservice/nginx configured (server dry run)\n',
+            'stderr': '',
+        }
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT)
+
+    assert result['result'] is None
+    assert 'deployment.apps/nginx' in result['changes']['manifests']['created']
+    assert 'service/nginx' in result['changes']['manifests']['configured']
+
+
+def test_applied_dry_run_includes_wait_info_in_comment(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx created (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                           wait=[WAIT_CONDITION])
+
+    assert result['result'] is None
+    assert 'Would wait first' in result['comment']
+
+
+def test_applied_dry_run_does_not_run_wait_commands(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    state.__opts__ = {'test': True}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'command': command})
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx created (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
+                  wait=[WAIT_CONDITION])
+
+    assert len(calls) == 1
+    assert 'wait' not in calls[0]['command']
+    assert '--dry-run=server' in calls[0]['command']
+
+
+def test_applied_dry_run_with_source_and_content_concatenates(tmp_path):
+    state = _load_state_module()
+    binary = _create_binary(tmp_path)
+    source = _create_source(tmp_path)
+    state.__opts__ = {'test': True}
+    calls = []
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'command': command, 'stdin': stdin})
+        return {
+            'retcode': 0,
+            'stdout': 'deployment.apps/nginx created (server dry run)\nservice/nginx created (server dry run)\n',
+            'stderr': '',
+        }
+
+    state.__salt__ = {'cmd.run_all': run_all}
+
+    result = state.applied('test', binary=str(binary), source=str(source), content=NGINX_SERVICE)
+
+    assert result['result'] is None
+    assert NGINX_DEPLOYMENT in calls[0]['stdin']
+    assert NGINX_SERVICE in calls[0]['stdin']
+    assert '--dry-run=server' in calls[0]['command']
 
 
 # --- successful apply ---
@@ -540,16 +669,17 @@ def test_applied_wait_reported_in_test_mode(tmp_path):
     state = _load_state_module()
     binary = _create_binary(tmp_path)
     state.__opts__ = {'test': True}
-    calls = []
-    state.__salt__ = {'cmd.run_all': calls.append}
+
+    def run_all(command, python_shell, stdin):
+        return {'retcode': 0, 'stdout': 'deployment.apps/nginx created (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
 
     result = state.applied('test', binary=str(binary), content=NGINX_DEPLOYMENT,
                            wait=[WAIT_CONDITION])
 
     assert result['result'] is None
-    assert 'would be applied' in result['comment']
     assert 'Would wait first' in result['comment']
-    assert calls == []
 
 
 def test_applied_fails_when_wait_item_has_unknown_key(tmp_path):
@@ -935,21 +1065,28 @@ def test_applied_with_template_true_reports_render_error(tmp_path):
     assert 'template' in result['comment'].lower()
 
 
-def test_applied_with_template_true_in_test_mode_does_not_apply(tmp_path):
-    """In test mode with template=True, content is rendered but apply does not run."""
+def test_applied_with_template_true_in_test_mode_runs_dry_run(tmp_path):
+    """In test mode with template=True, content is rendered and dry-run is executed."""
     state = _load_state_module()
     binary = _create_binary(tmp_path)
     state.__opts__ = {'test': True}
     state.__pillar__ = {'zone': 'eu-west'}
     calls = []
-    state.__salt__ = {'cmd.run_all': calls.append}
+
+    def run_all(command, python_shell, stdin):
+        calls.append({'command': command, 'stdin': stdin})
+        return {'retcode': 0, 'stdout': 'configmap/test created (server dry run)\n', 'stderr': ''}
+
+    state.__salt__ = {'cmd.run_all': run_all}
 
     content = 'apiVersion: v1\nkind: ConfigMap\ndata:\n  zone: {{ pillar["zone"] }}\n'
     result = state.applied('test', binary=str(binary), content=content, template=True)
 
     assert result['result'] is None
-    assert calls == []
-    assert 'would be applied' in result['comment']
+    assert len(calls) == 1
+    assert '--dry-run=server' in calls[0]['command']
+    assert 'eu-west' in calls[0]['stdin']
+    assert '{{' not in calls[0]['stdin']
 
 
 # --- wait retry on NotFound ---

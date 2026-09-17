@@ -159,12 +159,30 @@ def applied(name, binary=DEFAULT_BINARY, source=None, content=None, wait=None,
         manifest = '\n---\n'.join(_strip_trailing_separator(p) for p in parts)
 
     if __opts__.get('test'):
-        ret['result'] = None
-        comment = 'Manifests would be applied with: {0}'.format(' '.join(command))
+        dry_run_command = command + ['--dry-run=server']
+        result = __salt__['cmd.run_all'](
+            dry_run_command,
+            python_shell=False,
+            stdin=manifest,
+        )
+        if result.get('retcode') != 0:
+            ret['result'] = False
+            ret['comment'] = 'Dry-run validation failed: {0}'.format(
+                (result.get('stderr') or result.get('stdout') or 'no output').strip()
+            )
+            return ret
+        stdout = result.get('stdout') or ''
+        changes = _parse_changes(stdout)
+        if changes:
+            ret['result'] = None
+            ret['changes'] = {'manifests': changes}
+            ret['comment'] = 'Dry-run validation passed. Manifests would be changed.'
+        else:
+            ret['result'] = True
+            ret['comment'] = 'Dry-run validation passed. Manifests are already up to date.'
         if wait:
             wait_commands = [' '.join(_build_wait_command(binary, c)) for c in wait]
-            comment += '\nWould wait first: {0}'.format('; '.join(wait_commands))
-        ret['comment'] = comment
+            ret['comment'] += '\nWould wait first: {0}'.format('; '.join(wait_commands))
         return ret
 
     # Run wait conditions as pre-conditions before any apply.
@@ -305,27 +323,25 @@ def _read_source(source):
         }
 
 
+_CHANGE_SUFFIXES = (
+    (' created (server dry run)', 'created'),
+    (' configured (server dry run)', 'configured'),
+    (' serverside-applied (server dry run)', 'serverside-applied'),
+    (' created', 'created'),
+    (' configured', 'configured'),
+    (' serverside-applied', 'serverside-applied'),
+)
+
+
 def _parse_changes(output):
-    created = []
-    configured = []
-    server_side_applied = []
+    changes = {}
 
     for line in output.splitlines():
         line = line.strip()
-        if line.endswith(' created'):
-            created.append(line[: -len(' created')])
-        elif line.endswith(' configured'):
-            configured.append(line[: -len(' configured')])
-        elif line.endswith(' serverside-applied'):
-            server_side_applied.append(line[: -len(' serverside-applied')])
-
-    changes = {}
-    if created:
-        changes['created'] = created
-    if configured:
-        changes['configured'] = configured
-    if server_side_applied:
-        changes['serverside-applied'] = server_side_applied
+        for suffix, key in _CHANGE_SUFFIXES:
+            if line.endswith(suffix):
+                changes.setdefault(key, []).append(line[: -len(suffix)])
+                break
 
     return changes
 
